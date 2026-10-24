@@ -27,7 +27,7 @@ jobs:
       MACOSX_DEPLOYMENT_TARGET: "12.0"
       FILMCRAFT_BUILD_SHA: ${{ github.sha }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
@@ -52,7 +52,7 @@ jobs:
               shutil.copy2(name,out/name)
           (out/'README.txt').write_text('Smotri native validation build. Not a complete public installer: bundled Downloader tools and platform launch/import/export validation are required before release. API keys are not included.\n')
           (out/'SHA256SUMS.json').write_text(json.dumps({p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in out.iterdir() if p.is_file()},indent=2))
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: Smotri-${{ matrix.name }}-validation
           path: dist/validation/
@@ -62,12 +62,12 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 120
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
       - run: cargo build --release --locked -p filmcraft-web --target wasm32-unknown-unknown
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: Smotri-WebAssembly-validation
           path: target/wasm32-unknown-unknown/release/filmcraft_web.wasm
