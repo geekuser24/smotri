@@ -36,7 +36,7 @@ serde_json = { workspace = true }
 subtle = "2.6"
 log = { workspace = true }
 rfd = { workspace = true }
-cpal = "0.16"
+cpal = "0.18"
 # Files and images on the system clipboard for Paste (#611); egui already uses it for text.
 arboard = "3"
 chrono = { workspace = true, features = ["clock"] }
@@ -45,15 +45,15 @@ sys-locale = "0.3"
 open = "5"
 
 # Jarvis streaming speech recognition (Rust TLS and bounded native audio capture).
-tungstenite = { version = "0.29", default-features = false, features = ["handshake", "rustls-tls-native-roots"] }
-base64 = "0.22"
+tungstenite = { version = "0.30", default-features = false, features = ["handshake", "rustls-tls-native-roots"] }
+base64 = "0.23"
 rustls = { version = "0.23", default-features = false, features = ["std", "tls12"] }
 rustls-rustcrypto = "0.0.2-alpha"
 
 [dev-dependencies]
 glob = "0.3"
 # graphics.rs: enumerate the real adapters in a test.
-pollster = "0.4"
+pollster = "1.0"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 security-framework = "3"
@@ -67,7 +67,7 @@ winit = { version = "0.30", default-features = false }
 [target.'cfg(target_os = "linux")'.dependencies]
 # Settings ▸ Appearance ▸ Sync with system: the XDG desktop portal's colour scheme. The zbus the
 # portal file dialogs (rfd) and accesskit already use.
-zbus = "5.19"
+zbus = "6.0"
 
 # Icon + VERSIONINFO for filmcraft.exe (build.rs); only needed when building on Windows.
 [target.'cfg(windows)'.build-dependencies]
