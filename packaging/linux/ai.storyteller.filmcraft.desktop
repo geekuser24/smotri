@@ -1,6 +1,6 @@
 [Desktop Entry]
 Type=Application
-Name=FilmCraft
+Name=Smotri
 GenericName=Video Editor
 Comment=Edit video, color and sound
 Exec=filmcraft %F

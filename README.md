@@ -1,81 +1,26 @@
-<p align="center">
-  <a href="https://getartcraft.com/">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="docs/brand/artcraft-logo-white.svg">
-      <img alt="ArtCraft" src="docs/brand/artcraft-logo.svg" width="200">
-    </picture>
-  </a>
-</p>
+<p align="center"><img src="assets/smotri/icon.png" width="128" alt="Смотри — белые глаза"></p>
 
+# Смотри / Smotri
 
-<p align="center">
-  <img src="assets/app-icon/hicolor/256x256/apps/ai.storyteller.filmcraft.png" width="128" height="128" alt="FilmCraft icon: an engraved owl on a purple tile">
-</p>
+Видеоредактор от AKT.MP4 на основе открытого проекта FilmCraft. Монтаж, голосовое управление «Джарвис», вставки, загрузчик, удаление тишины и дублей.
 
-<h1 align="center">FilmCraft</h1>
+[Сайт](https://smotri.cc) · [Telegram](https://t.me/aktmp4) · [YouTube](https://www.youtube.com/@akt.mp4) · [Исходники](https://github.com/geekuser24/smotri) · [Все ссылки / Taplink](https://taplink.cc/acekillat) · [Заказать монтаж](https://t.me/maksmp4)
 
-<p align="center">
-  <b>Video editing, color and sound; an open-source, professional non-linear video editor, built in pure Rust.</b>
-</p>
+Ранняя версия. Готовность установщиков для каждой платформы указывается в Releases; наличие кода для платформы не означает, что сборка проверена. Личные API-ключи не поставляются: ElevenLabs и GIPHY настраиваются пользователем. Проекты и ключи существующей установки сохраняют совместимые внутренние идентификаторы.
 
-<p align="center">
-  An open-source, modern non-linear video editing workflow: native on macOS, Windows and Linux, and in the browser via WebAssembly.<br>
-  By the ArtCraft team.
-</p>
+При региональных ограничениях внешних сервисов можно попробовать [NetFix VPN](https://connect.netfix.app). Это отдельный сервис, не обязательная часть редактора.
 
-<p align="center">
-  <a href="#license-and-credits"><img alt="License: MIT OR Apache-2.0" src="https://img.shields.io/badge/license-MIT%20%7C%20Apache--2.0-8b5cf6?style=flat-square"></a>
-  <img alt="Written in pure Rust" src="https://img.shields.io/badge/pure-Rust-6a3fd6?style=flat-square&logo=rust&logoColor=white">
-  <img alt="Runs on macOS, Windows and Linux" src="https://img.shields.io/badge/runs%20on-macOS%20%7C%20Windows%20%7C%20Linux-8b5cf6?style=flat-square">
-  <a href="#status"><img alt="Status: young and moving fast" src="https://img.shields.io/badge/status-young%20and%20moving%20fast-6a3fd6?style=flat-square"></a>
-  <br>
-  <a href="https://sonarcloud.io/project/overview?id=storytold_filmcraft"><img alt="Scanned by SonarCloud" src="https://img.shields.io/badge/Scanned_by-SonarCloud-4b9fd5?style=flat-square&logo=sonarqubecloud&logoColor=white"></a>
-  <a href="https://coderabbit.ai"><img alt="Reviewed by CodeRabbit" src="https://img.shields.io/coderabbit/prs/github/storytold/filmcraft?style=flat-square&label=Reviewed%20by%20CodeRabbit&logo=coderabbit"></a>
-</p>
+Исходный движок и его авторство сохранены: [FilmCraft](https://github.com/storytold/filmcraft), MIT OR Apache-2.0. Лицензии сторонних компонентов находятся рядом с ними. Логотип и оформление Smotri заменяют товарные знаки исходного проекта.
 
-<p align="center">
-  <a href="https://discord.gg/artcraft"><img alt="Join the ArtCraft community on Discord" src="https://img.shields.io/badge/Join%20us%20on%20Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white" height="40"></a>
-</p>
+Ниже — документация возможностей исходного движка. Поддержка произвольных Premiere-пресетов ещё не подтверждена; After Effects-проекты не поддерживаются.
 
-<p align="center">
-  <a href="https://getartcraft.com/apps/filmcraft"><b>FilmCraft on getartcraft.com</b></a> ·
-  <a href="https://getartcraft.com/">ArtCraft</a> ·
-  <a href="https://getartcraft.com/apps">All Crafting Apps</a>
-</p>
+## Автор и исходный проект
 
-<br>
+**Смотри / Smotri — проект AKT.MP4.** [GitHub автора](https://github.com/geekuser24) · [YouTube](https://www.youtube.com/@akt.mp4) · [Telegram](https://t.me/aktmp4).
 
-<p align="center">
-  <img src="docs/images/filmcraft-hero.png" alt="FilmCraft in the Color workspace, mid-way through an Apollo 11 documentary cut from NASA footage: the Program monitor on the Saturn V clearing the launch tower with a Launch Complex 39A lower third and an air-to-ground subtitle, Effect Controls with color grading and Scale keyframes on the shot, the color grading panel, bins of NASA selects, and a timeline with 49 picture cuts, B-roll, titles, a caption track, mission audio, a ducked music bed, named markers, a rendered section and live loudness meters" width="100%">
-</p>
+Редактор основан на **[FilmCraft](https://github.com/storytold/filmcraft)**. Авторство исходного движка принадлежит **ArtCraft Team и участникам FilmCraft**; [история и список участников оригинала](https://github.com/storytold/filmcraft/graphs/contributors). Smotri — самостоятельная модификация, а не официальный релиз команды FilmCraft. Исходная история Git, лицензии и обязательные уведомления сохранены.
 
-<p align="center"><sub><i>Apollo 11 - Tranquility</i>: a three-minute documentary edit of NASA's 1969 launch, landing and moonwalk film, with subtitles from the mission transcript. Every frame in these screenshots comes from public-domain footage, decoded, composited and graded by FilmCraft's own code.</sub></p>
-
-> [!NOTE]
-> **ArtCraft is a community of artists from all walks of life.** Digital, generative, music,
-> games &mdash; if you make things, you're one of us. **[Come say hi on Discord](https://discord.gg/artcraft).**
-
-<p align="center">
-  <a href="#edit">Edit</a> ·
-  <a href="#color">Color</a> ·
-  <a href="#effects-and-motion">Effects</a> ·
-  <a href="#audio">Audio</a> ·
-  <a href="#titles-and-captions">Titles</a> ·
-  <a href="#formats-and-codecs">Formats</a> ·
-  <a href="#export">Export</a> ·
-  <a href="#interchange">Interchange</a> ·
-  <a href="#built-for-agents">Agents</a> ·
-  <a href="#get-started">Get started</a> ·
-  <a href="#downloads">Downloads</a> ·
-  <a href="#documentation">Docs</a> ·
-  <a href="#status">Status</a>
-</p>
-
-<br>
-
-FilmCraft is a professional non-linear editor: familiar panels, workspaces, tools and shortcuts, so your hands already know where everything is. Underneath, it is new from the bitstream up. The H.264, HEVC, ProRes and AAC codecs are our own, written in Rust from the public specifications. A GPU compositor works in linear light. Frame math runs on exact integer time, so edits never drift. And every action in the app is a command that an AI agent can drive as precisely as you can.
-
-<br>
+В этой версии добавлены голосовое управление Jarvis на русском и английском, монтажные команды, корректирующие слои и шейк-пресеты, GIPHY-вставки, загрузчик и панели удаления тишины/дублей. Ключи сервисов пользователь вводит самостоятельно.
 
 ## Edit
 
@@ -174,7 +119,7 @@ FilmCraft is a professional non-linear editor: familiar panels, workspaces, tool
 
 ## Formats and codecs
 
-No FFmpeg inside. The video codecs, AAC, Opus and the containers are our own Rust code, implemented from the public ITU-T, ISO and IETF specifications and tested frame by frame against ffmpeg as an external oracle.
+The editing engine implements video codecs, AAC, Opus and containers in Rust from public ITU-T, ISO and IETF specifications. Smotri’s Downloader separately invokes external yt-dlp and FFmpeg helper programs; these are not linked into the editing engine and have their own licenses. Public installer readiness is tracked in [the release checklist](docs/SMOTRI-RELEASE.md).
 
 | | Decode | Encode | Notes |
 |---|:---:|:---:|---|
@@ -269,7 +214,7 @@ git clone https://github.com/storytold/craft-fonts ../craft-fonts
 CRAFT_FONTS_DIR="$PWD/../craft-fonts" cargo run --release -p filmcraft
 ```
 
-The control protocol is documented in [docs/control-protocol.md](docs/control-protocol.md). Stuck, or want to show what you made? Ask in [Discord](https://discord.gg/artcraft).
+The control protocol is documented in [docs/control-protocol.md](docs/control-protocol.md). Stuck, or want to show what you made? Ask in [Telegram](https://t.me/aktmp4).
 
 ## Documentation
 
@@ -305,7 +250,7 @@ The biggest gaps today:
 - **Real-world media and platforms.** Our decoders are bit-exact on conformance streams, but camera and phone files in the wild are less tested. Windows and Linux get far less testing than macOS.
 - **AI features.** Few so far; speech to text is optional and off by default.
 
-Bug reports with real footage are the most useful thing you can send us: [open an issue](https://github.com/storytold/filmcraft/issues) or tell us in [Discord](https://discord.gg/artcraft).
+Bug reports with real footage are the most useful thing you can send us: [open an issue](https://github.com/storytold/filmcraft/issues) or tell us in [Telegram](https://t.me/aktmp4).
 
 ## Architecture
 
@@ -325,130 +270,9 @@ Nothing below the front ends depends on a UI toolkit or OS API. `cargo xtask ci`
 
 ## Downloads
 
-**New to FilmCraft?** Download it from the [FilmCraft page on getartcraft.com](https://getartcraft.com/apps/filmcraft). That's the easiest way to install it.
+[smotri.cc](https://smotri.cc) lists available downloads. [GitHub Actions](https://github.com/geekuser24/smotri/actions/workflows/release.yml) builds native validation binaries for macOS ARM64/Intel, Windows x64/ARM64 and Linux x64/ARM64, plus WebAssembly. Validation artifacts are not complete installers and are not advertised as ready on the site.
 
-**Want a specific build or format?** On GitHub, the [latest release](https://github.com/storytold/filmcraft/releases/latest) has every build listed below, and [all releases](https://github.com/storytold/filmcraft/releases) has earlier versions and their notes. `<ver>` in the file names is the version number, and `SHA256SUMS.txt` lists a checksum for every file.
-
-### Windows
-
-| Build | Installer | Portable |
-|---|---|---|
-| x64 (64-bit Intel/AMD) | `filmcraft-<ver>-windows-x64.msi` | `filmcraft-<ver>-windows-x64-portable.zip` |
-| arm64 (Snapdragon and other ARM PCs) | `filmcraft-<ver>-windows-arm64.msi` | `filmcraft-<ver>-windows-arm64-portable.zip` |
-| x86 (32-bit) | `filmcraft-<ver>-windows-x86.msi` | `filmcraft-<ver>-windows-x86-portable.zip` |
-
-Installers and executables are code-signed.
-
-**If the app doesn't open on Windows:** the desktop app initializes only Vulkan and DirectX 12 by
-default, not OpenGL. Letting wgpu also create an OpenGL instance can crash some graphics drivers (AMD's
-`atio6axx.dll`) before the window appears, so the app would flash in Task Manager and quit.
-`WGPU_BACKEND` overrides the default for troubleshooting (for example `dx12` or `vulkan`). In
-PowerShell, from the folder containing the executable:
-
-```powershell
-$env:WGPU_BACKEND = "vulkan"
-& .\filmcraft.exe
-Remove-Item Env:WGPU_BACKEND                     # restore the default for later launches
-```
-
-An explicit `gl` override can bring the driver crash back on affected systems. The macOS, Linux
-and web backend defaults are unchanged.
-
-A PC whose GPUs were installed from different driver packages of one vendor (a laptop with an
-integrated and a discrete AMD GPU, for example) can list one GPU twice, once through each installed
-version of the Vulkan driver, and a window drawn through the stale one crashes inside the driver
-(`amdvlk64.dll`, exit code `0xc0000005`). FilmCraft draws with the newer one and says so in
-`%APPDATA%\FilmCraft\Logs\filmcraft.log`; installing one driver package for every GPU removes the
-duplicate. With one driver per GPU the adapter is the one wgpu picks, as before.
-
-### macOS
-
-| Build | File | Notes |
-|---|---|---|
-| App, universal (Apple silicon + Intel) | `filmcraft-<ver>-macos-universal.dmg` | Signed and notarized |
-| Command-line tool, universal | `filmcraft-cli-<ver>-macos-universal.zip` | Signed and notarized |
-
-### Linux
-
-| Format | x86_64 | aarch64 (ARM64) | Notes |
-|---|---|---|---|
-| AppImage | `filmcraft-<ver>-linux-x86_64.AppImage` | `filmcraft-<ver>-linux-aarch64.AppImage` | Runs anywhere; updates itself with [AppImageUpdate](https://github.com/AppImageCommunity/AppImageUpdate) (`.zsync` files) |
-| Flatpak | `filmcraft-<ver>-linux-x86_64.flatpak` | `filmcraft-<ver>-linux-aarch64.flatpak` | Sandboxed; `flatpak install --user <file>` |
-| Debian/Ubuntu | `filmcraft-<ver>-linux-x86_64.deb` | `filmcraft-<ver>-linux-aarch64.deb` | |
-| Fedora/RHEL/openSUSE | `filmcraft-<ver>-linux-x86_64.rpm` | `filmcraft-<ver>-linux-aarch64.rpm` | |
-| Tarball | `filmcraft-<ver>-linux-x86_64.tar.gz` | `filmcraft-<ver>-linux-aarch64.tar.gz` | Unpack and run `./install.sh` |
-
-RISC-V (riscv64): `filmcraft-<ver>-linux-riscv64.tar.gz` (tarball only; needs glibc 2.39+, e.g. Ubuntu 24.04
-or Debian 13).
-
-The tarball installer places FilmCraft, its command-line tool and desktop integration in
-`~/.local`, without administrator permissions. For all users, run
-`sudo ./install.sh --prefix /usr/local` instead. Running the installer again updates the installation.
-
-**Gentoo (community-maintained):** the [::snakebyte overlay](https://github.com/switch87/snakebyte-overlay)
-packages the Linux release as `media-video/filmcraft-bin`. It is maintained by the community, not by the
-FilmCraft team, so report packaging problems to the overlay:
-
-```sh
-eselect repository add snakebyte git https://github.com/switch87/snakebyte-overlay.git
-emaint sync -r snakebyte
-echo 'media-video/filmcraft-bin ~amd64' >> /etc/portage/package.accept_keywords/filmcraft
-emerge --ask media-video/filmcraft-bin
-```
-
-### FreeBSD
-
-| Build | File |
-|---|---|
-| x86_64 | `filmcraft-<ver>-freebsd-x86_64.tar.gz` |
-
-### Web (WebAssembly)
-
-| Build | File | Notes |
-|---|---|---|
-| Static site | `filmcraft-web-<ver>.zip` | Runs in a modern browser; host it on any static server |
-
-## The Crafting Apps
-
-FilmCraft is one of the **Crafting Apps**: free, open-source creative tools from the
-[ArtCraft](https://getartcraft.com/) team, each written from scratch in Rust and each able to
-stand on its own.
-
-| | App | What it's for | Code | Learn more |
-|:-:|---|---|---|---|
-| <img src="https://raw.githubusercontent.com/storytold/photocraft/main/assets/app-icon/hicolor/64x64/apps/ai.storyteller.photocraft.png" alt="" width="32" height="32"> | **PhotoCraft** | Image editing: layers, masks, type and real PSD files | [GitHub](https://github.com/storytold/photocraft) | [Website](https://getartcraft.com/apps/photocraft) |
-| <img src="https://raw.githubusercontent.com/storytold/vectorcraft/main/assets/app-icon/hicolor/64x64/apps/ai.storyteller.vectorcraft.png" alt="" width="32" height="32"> | **VectorCraft** | Vector illustration | [GitHub](https://github.com/storytold/vectorcraft) | [Website](https://getartcraft.com/apps/vectorcraft) |
-| <img src="https://raw.githubusercontent.com/storytold/filmcraft/main/assets/app-icon/hicolor/64x64/apps/ai.storyteller.filmcraft.png" alt="" width="32" height="32"> | **FilmCraft** | **Video editing, color and sound · you are here** | [GitHub](https://github.com/storytold/filmcraft) | [Website](https://getartcraft.com/apps/filmcraft) |
-| <img src="https://raw.githubusercontent.com/storytold/lightcraft/main/assets/app-icon/hicolor/64x64/apps/ai.storyteller.lightcraft.png" alt="" width="32" height="32"> | **LightCraft** | Photo library and raw development | [GitHub](https://github.com/storytold/lightcraft) | [Website](https://getartcraft.com/apps/lightcraft) |
-| <img src="https://raw.githubusercontent.com/storytold/pdfcraft/main/assets/app-icon/hicolor/64x64/apps/ai.storyteller.pdfcraft.png" alt="" width="32" height="32"> | **PdfCraft** | Reading, organizing and protecting PDFs | [GitHub](https://github.com/storytold/pdfcraft) | [Website](https://getartcraft.com/apps/pdfcraft) |
-| <img src="https://raw.githubusercontent.com/storytold/effectcraft/main/assets/app-icon/hicolor/64x64/apps/ai.storyteller.effectcraft.png" alt="" width="32" height="32"> | **EffectCraft** | Motion graphics and visual effects | [GitHub](https://github.com/storytold/effectcraft) | [Website](https://getartcraft.com/apps/effectcraft) |
-| <img src="https://raw.githubusercontent.com/storytold/designcraft/main/assets/app-icon/hicolor/64x64/apps/ai.storyteller.designcraft.png" alt="" width="32" height="32"> | **DesignCraft** | Page layout and publishing | [GitHub](https://github.com/storytold/designcraft) | [Website](https://getartcraft.com/apps/designcraft) |
-
-And [**ArtCraft**](https://getartcraft.com/) itself, our AI image and video studio for artists who want real control.
-
-<br>
-
-<p align="center">
-  <a href="https://discord.gg/artcraft"><img alt="Join the ArtCraft community on Discord" src="https://img.shields.io/badge/Join%20us%20on%20Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white" height="40"></a>
-</p>
-
-<h3 align="center">Come make things with us</h3>
-
-<p align="center">
-  Our Discord is where artists of every kind hang out: people who paint, shoot, draw, cut film,
-  set type, and people still figuring out what they like to make. Share what you're working on,
-  ask for help, tell us what's broken, or tell us what you wish these tools could do.
-  Whatever your medium and however long you've been at it, you're welcome here.
-</p>
-
-<p align="center">
-  <a href="https://discord.gg/artcraft"><b>discord.gg/artcraft</b></a> ·
-  <a href="https://getartcraft.com/">getartcraft.com</a> ·
-  <a href="https://getartcraft.com/apps">The Crafting Apps</a> ·
-  <a href="https://getartcraft.com/apps/filmcraft">FilmCraft</a>
-</p>
-
-<br>
+Public installers are being prepared. Bundled Downloader helpers, their corresponding sources, launch/import/export checks and platform signing are tracked in [the release checklist](docs/SMOTRI-RELEASE.md). Do not assume that builds are signed or notarized unless a release explicitly says so.
 
 ## License and credits
 
@@ -462,20 +286,4 @@ with its author, source and license in [ATTRIBUTION.md](ATTRIBUTION.md). Builds 
 
 **Footage and music in the screenshots:** NASA's Apollo 11 film and television footage from [images.nasa.gov](https://images.nasa.gov) (launch, Launch Control Center, lunar surface and recovery) and the Apollo 11 air-to-ground voice transcript, all US Government works in the public domain (NASA does not endorse this project); *Night of the Living Dead* (1968), *Carnival of Souls* (1962) and *Charade* (1963), all in the US public domain; *Earth Views from the ISS* by NASA; Chopin's Nocturne Op. 48 No. 1 and Ballade No. 1, performed for Musopen and released under CC0. The media itself is not in this repository. Sources and details for every asset are in [ATTRIBUTION.md](ATTRIBUTION.md).
 
-FilmCraft is an independent implementation. It contains no proprietary code, icons, images, presets or LUTs, and no GPL or LGPL code; every icon is drawn in code and every asset is openly licensed and attributed ([AGENTS.md](AGENTS.md)), apart from the ArtCraft name and logos, which are trademarks of the ArtCraft Team used under [`docs/brand/LICENSE-brand.txt`](docs/brand/LICENSE-brand.txt). ffmpeg is used only as an external test oracle.
-
-The ArtCraft name, wordmark and logos in [`docs/brand/`](docs/brand/) are trademarks of the
-ArtCraft Team and are not covered by this license. They may be used only unmodified, and only as
-part of this repository and FilmCraft, under [`docs/brand/LICENSE-brand.txt`](docs/brand/LICENSE-brand.txt).
-Forks and modified versions must remove them.
-
-<br>
-
-<p align="center">
-  <a href="https://getartcraft.com/"><img alt="ArtCraft" src="docs/brand/artcraft-mark.svg" width="28"></a><br>
-  <sub>Made by the <a href="https://getartcraft.com/">ArtCraft</a> team and community.</sub>
-</p>
-
-## Star history
-
-[![Star History Chart](https://api.star-history.com/svg?repos=storytold/filmcraft&type=Date&legend=top-left)](https://www.star-history.com/?repos=storytold%2Ffilmcraft&type=date&legend=top-left)
+Smotri retains the original engine authors and licenses. Upstream trademark artwork has been removed from this fork. The Downloader invokes separately distributed yt-dlp, FFmpeg and Deno processes; their licenses and corresponding sources must accompany public bundles. See [Downloader](docs/downloader.md).

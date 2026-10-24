@@ -1,0 +1,5 @@
+config.json
+smotri-login-secret.json
+*.sqlite*
+.env*
+static/covers/

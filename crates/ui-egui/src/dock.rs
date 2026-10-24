@@ -15,6 +15,10 @@ pub enum PanelKind {
     Project,
     MediaBrowser,
     Libraries,
+    Inserts,
+    Downloader,
+    SilenceRemoval,
+    DuplicateTakes,
     Info,
     Effects,
     Markers,
@@ -43,10 +47,14 @@ pub enum PanelKind {
 }
 
 impl PanelKind {
-    pub const ALL: [PanelKind; 28] = [
+    pub const ALL: [PanelKind; 32] = [
         PanelKind::Project,
         PanelKind::MediaBrowser,
         PanelKind::Libraries,
+        PanelKind::Inserts,
+        PanelKind::Downloader,
+        PanelKind::SilenceRemoval,
+        PanelKind::DuplicateTakes,
         PanelKind::Info,
         PanelKind::Effects,
         PanelKind::Markers,
@@ -78,6 +86,10 @@ impl PanelKind {
             PanelKind::Project => "Project",
             PanelKind::MediaBrowser => "Media Browser",
             PanelKind::Libraries => "Libraries",
+            PanelKind::Inserts => "Inserts",
+            PanelKind::Downloader => "Downloader",
+            PanelKind::SilenceRemoval => "Silence Removal",
+            PanelKind::DuplicateTakes => "Duplicate Takes",
             PanelKind::Info => "Info",
             PanelKind::Effects => "Effects",
             PanelKind::Markers => "Markers",
@@ -317,7 +329,7 @@ pub fn workspace(name: &str) -> DockNode {
             Ratio(0.52),
             hsplit(
                 Ratio(0.46),
-                tabs(&[Project, MediaBrowser, Libraries, Info, Effects, Markers, History], 0),
+                tabs(&[Project, MediaBrowser, Libraries, Info, Effects, Markers, History, Inserts, Downloader], 0),
                 hsplit(Ratio(0.5), tabs(&[Source, EffectControls, AudioClipMixer, Metadata], 0), tabs(&[Program], 0)),
             ),
             bottom_editing(),
@@ -365,7 +377,7 @@ pub fn workspace(name: &str) -> DockNode {
                 tabs(&[Source, EffectControls, AudioClipMixer, Metadata, LumetriScopes, Text], 0),
                 hsplit(Ratio(0.6), tabs(&[Program], 0), tabs(&[LumetriColor, EssentialGraphics, EssentialSound, TextToSpeech, Properties, AudioTrackMixer], 0)),
             ),
-            hsplit(Ratio(0.26), tabs(&[Project, MediaBrowser, Libraries, Info, Effects, Markers, History], 0), bottom_editing()),
+            hsplit(Ratio(0.26), tabs(&[Project, MediaBrowser, Libraries, Info, Effects, Markers, History, Inserts, Downloader], 0), bottom_editing()),
         ),
         // Editing (default), Learning, Review — Premiere 26 factory layout:
         // top: Source group | Program | Properties; bottom: Project group | Tools | Timeline | Meters.
@@ -378,7 +390,7 @@ pub fn workspace(name: &str) -> DockNode {
             ),
             hsplit(
                 Ratio(0.29),
-                tabs(&[Project, MediaBrowser, Libraries, Info, Effects, Markers, History], 0),
+                tabs(&[Project, MediaBrowser, Libraries, Info, Effects, Markers, History, Inserts, Downloader], 0),
                 hsplit(FixedA(64.0), tabs(&[Tools], 0), hsplit(FixedB(116.0), tabs(&[Timeline], 0), tabs(&[AudioMeters], 0))),
             ),
         ),

@@ -6,3 +6,14 @@ plan/
 .DS_Store
 .claude/worktrees/
 __pycache__/
+
+# Private deployment and local credentials must never be published.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+site/config.json
+site/smotri-login-secret.json
+site/*.sqlite*
+site/static/covers/

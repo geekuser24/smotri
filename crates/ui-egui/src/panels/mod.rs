@@ -1,6 +1,7 @@
 //! Panel bodies. `show` dispatches on [`PanelKind`]; drag-and-drop between panels (project items,
 //! effects) is carried in egui temp data so the timeline/monitors can accept drops.
 
+pub mod audio_cleanup;
 pub mod audio_fx_editor;
 pub mod clip_dialogs;
 pub mod color_dialogs;
@@ -92,6 +93,10 @@ pub fn show(app: &mut FilmcraftApp, ui: &mut egui::Ui, p: PanelKind, rect: Rect)
         PanelKind::History => misc::history(app, ui, rect),
         PanelKind::Markers => misc::markers(app, ui, rect),
         PanelKind::Info => misc::info(app, ui, rect),
+        PanelKind::Inserts => crate::inserts::show(app, ui, rect),
+        PanelKind::Downloader => crate::downloader::show(app, ui, rect),
+        PanelKind::SilenceRemoval => audio_cleanup::show(app, ui, rect, false),
+        PanelKind::DuplicateTakes => audio_cleanup::show(app, ui, rect, true),
         PanelKind::MediaBrowser => media_browser::show(app, ui, rect),
         PanelKind::AudioTrackMixer => mixer::track_mixer(app, ui, rect),
         PanelKind::AudioClipMixer => mixer::clip_mixer(app, ui, rect),

@@ -1,10 +1,10 @@
 # Russian (ru) catalog. Columns separated by TAB: context <TAB> source <TAB> translation
 # Empty context is a plain UI string. Escapes: \n, \t, \\; preserve placeholders and trailing …
-# Original clean-room translations from the meaning of FilmCraft's English menu labels,
+# Original clean-room translations from the meaning of Smotri's English menu labels,
 # using Russian video-editing vocabulary (Premiere-style). No proprietary localization resources were used.
 # Core menu coverage; other interface strings fall back to English.
 
-	About FilmCraft	О FilmCraft
+	About Smotri	О Смотри
 	Add Audio Submix Track	Добавить дорожку подмикширования звука
 	Add Caption at Playhead	Добавить субтитр в позиции курсора воспроизведения
 	Add Chapter Marker…	Добавить маркер главы…
@@ -126,9 +126,9 @@
 	File	Файл
 	File…	Файл…
 	Fill frame	Заполнить кадр
-	FilmCraft Help…	Справка FilmCraft…
-	FilmCraft on GitHub	FilmCraft на GitHub
-	FilmCraft on getartcraft.com	FilmCraft на getartcraft.com
+	Smotri Help…	Справка Smotri…
+	Smotri on GitHub	Smotri на GitHub
+	Smotri on getartcraft.com	Smotri на getartcraft.com
 	Find Next	Найти далее
 	Find…	Найти…
 	Fit	По размеру
@@ -298,7 +298,7 @@
 	Select Previous Graphic	Выбрать предыдущий графический элемент
 	Select Previous Layer	Выбрать предыдущий слой
 	Selection Follows Playhead	Выделение следует за курсором воспроизведения
-	Selection as FilmCraft Project…	Выделение как проект FilmCraft…
+	Selection as Smotri Project…	Выделение как проект Smotri…
 	Selection…	Выделение…
 	Send Backward	Переместить назад
 	Send to Back	Переместить на задний план
@@ -360,3 +360,144 @@
 	Next Appearance Mode	Следующий режим оформления
 	Project Notes	Заметки проекта
 
+	Jarvis	Джарвис
+	Jarvis voice control	Голосовое управление — Джарвис
+	Toggle voice control; right-click for settings	Включить / выключить голосовой режим; правая кнопка — настройки
+	Toggle voice control	Переключить голосовой режим
+	Microphone off	Микрофон выключен
+	Voice control requires the desktop app	Голосовое управление доступно в настольном приложении
+	Connecting to ElevenLabs…	Подключение к ElevenLabs…
+	Listening for Jarvis…	Слушаю обращение «Джарвис»…
+	Command recognized	Команда распознана
+	Command not recognized	Команда не распознана
+	While enabled, microphone audio is sent to ElevenLabs. Russian and English are detected automatically.	Во включённом режиме звук микрофона передаётся ElevenLabs. Русский и английский определяются автоматически.
+	On macOS the key is stored in Keychain. Voice mode is always off at startup.	В macOS ключ хранится в связке ключей. При запуске голосовой режим всегда выключен.
+	Save key	Сохранить ключ
+	API key saved	API-ключ сохранён
+	Stop listening	Выключить микрофон
+	Start listening	Включить микрофон
+	Say Jarvis, then a command. Select clips before copy, cut or delete. Split cuts at the playhead.	Скажите «Джарвис» и команду. Для копирования, вырезания и удаления выделите клипы. Разрез выполняется под курсором воспроизведения.
+	ElevenLabs is unavailable in this network region	ElevenLabs недоступен в регионе текущего подключения
+	ElevenLabs connection rejected; check the API key, Scribe access and connection	ElevenLabs отклонил подключение: проверьте API-ключ, доступ к Scribe и сеть
+	Set the ElevenLabs API key in Settings → Jarvis	Укажите API-ключ ElevenLabs в разделе «Настройки → Джарвис»
+	Turn Jarvis off before changing the API key	Выключите Джарвиса перед изменением API-ключа
+	API key configured	API-ключ настроен
+	API key not configured	API-ключ не настроен
+	Enter a new key to replace the saved key	Введите новый ключ, чтобы заменить сохранённый
+	Enter your ElevenLabs API key	Введите API-ключ ElevenLabs
+	Click OK to save the key. Cancel discards changes.	Нажмите ОК для сохранения ключа. Отмена отменяет изменения.
+	Use the Jarvis button in the header to turn voice control on or off.	Кнопка «Джарвис» вверху редактора включает и выключает голосовой режим.
+	Close the dialog before using editor voice commands	Закройте диалог перед выполнением голосовых команд редактора
+	Command executed	Команда выполнена
+	Voice examples: forward 10 frames; speed 50 percent; louder 3 db; lock track video 1.	Примеры: вперед на 10 кадров; скорость 50 процентов; громче на 3 дб; заблокируй дорожку видео 1.
+	Menu commands also accept their English or Russian menu name. Dialogs still require manual input.	Команды меню также доступны по их русским и английским названиям. Поля диалогов пока заполняются вручную.
+	Close this dialog with its Cancel button	Закройте этот диалог его кнопкой «Отмена»
+	Search voice commands	Поиск голосовых команд
+
+	Choice cancelled	Выбор отменён
+	The clip or playhead changed. Ask Jarvis again.	Клип или курсор изменился. Повтори команду Джарвису.
+	Choice timed out. Ask Jarvis again.	Время выбора истекло. Повтори команду Джарвису.
+
+	I could not parse the whole request. Nothing changed. Specify the clip, action and numeric value.	Не удалось разобрать всю просьбу. Ничего не изменено. Укажи клип, действие и числовое значение.
+
+	Inserts	Вставки
+	Search GIFs…	Поиск GIF…
+	Sources	Источники
+	Inserts require the desktop app	Вставки доступны в настольном приложении
+	Enter a search phrase of 1–50 characters	Введи поисковую фразу от 1 до 50 символов
+	Enable GIPHY in Sources	Включи GIPHY в списке источников
+	Searching GIPHY…	Поиск в GIPHY…
+	An insert is already downloading	Вставка уже загружается
+	Downloading GIF…	Загрузка GIF…
+	No GIFs found	GIF не найдены
+	Choose a GIF to import into the project	Выбери GIF для добавления в проект
+	Project changed during download. Search and import again.	Проект изменился во время загрузки. Повтори добавление вставки.
+	GIF imported. Drag it from Project to the timeline.	GIF добавлена. Перетащи её из панели «Проект» на таймлайн.
+	The GIPHY key is stored in macOS Keychain. Search terms are sent to GIPHY.	Ключ GIPHY хранится в связке ключей macOS. Поисковые запросы отправляются в GIPHY.
+	Open Window → Inserts to search. More sources can be added later.	Открой Окно → Вставки для поиска. Другие источники можно будет подключить позже.
+
+	Search	Поиск
+	Import	Импорт
+	Previous	Назад
+	Next	Далее
+
+	Enable Jarvis	Включить Джарвис
+	When disabled, the Jarvis button is hidden and voice control stops.	При выключении кнопка Джарвис скрывается, а голосовое управление останавливается.
+	Enable Jarvis in Settings → Jarvis	Включите Джарвис в настройках → Джарвис
+	Add to timeline after import	После импорта добавлять на таймлайн
+	Places the GIF at the playhead on a free video track, creating one if needed.	GIF вставляется в позиции курсора воспроизведения на свободную видеодорожку. При необходимости создаётся новая.
+	GIF imported and added to the timeline.	GIF импортирована и добавлена на таймлайн.
+	GIF imported into Project only: the active timeline changed.	GIF импортирована только в проект: активный таймлайн изменился.
+	GIF imported into Project; timeline placement failed	GIF импортирована в проект; не удалось добавить на таймлайн
+	Downloader	Загрузчик
+	Choose quality before downloading	Выбирать качество перед скачиванием
+	Default quality	Качество по умолчанию
+	Best available	Лучшее доступное
+	Audio only (WAV)	Только аудио (WAV)
+	Save downloads beside the project	Сохранять загрузки рядом с проектом
+	Download folder	Папка загрузок
+	Import downloads into Project	Импортировать загрузки в проект
+	Add downloads to the timeline	Добавлять загрузки на таймлайн
+	Cookies	Cookies
+	No cookies	Без cookies
+	Netscape cookies file	Файл cookies Netscape
+	Cookies file path	Путь к файлу cookies
+	yt-dlp executable (empty = automatic)	Путь к yt-dlp (пусто — встроенный)
+	FFmpeg executable (empty = automatic)	Путь к FFmpeg (пусто — встроенный)
+	Choose a download folder in Settings	Выберите папку загрузок в настройках
+	A download is already running	Загрузка уже выполняется
+	Cancelling…	Отмена…
+	Enter an HTTP or HTTPS video link	Вставьте ссылку на видео, начинающуюся с http:// или https://
+	Checking available formats…	Проверка доступных форматов…
+	The link changed. Check it again.	Ссылка изменилась. Нажмите «Скачать» ещё раз.
+	This quality is not available	Это качество недоступно
+	Downloading…	Скачивание…
+	Imported into Project only: the active timeline changed.	Импортировано только в проект: активный таймлайн изменился.
+	Download imported	Загрузка импортирована
+	Choose quality, then download	Выберите качество и начните скачивание
+	Download complete	Загрузка завершена
+	File saved; automatic import failed	Файл сохранён; автоматический импорт не удался
+	File saved. Project changed; use Import to add it.	Файл сохранён. Проект изменился — нажмите «В проект», чтобы добавить файл.
+	Paste a video link…	Вставьте ссылку на видео…
+	Download	Скачать
+	Download selected quality	Скачать выбранное
+	Import into Project	В проект
+	Add to timeline	На таймлайн
+	Show in folder	Показать в папке
+	Downloads are prepared as MP4 (H.264/AAC) or WAV for editing.	Для монтажа видео сохраняется в MP4 (H.264/AAC), аудио — в WAV.
+	For sign-in or age-restricted media, choose your signed-in browser in Settings → Downloader.	Для материалов с входом или ограничением возраста выберите свой браузер в настройках → Загрузчик.
+	Choose folder…	Выбрать папку…
+	Choose cookies file…	Выбрать файл cookies…
+	Sign in to YouTube in browser	Войти в YouTube через браузер
+	Sign in using your browser, then select that browser above. Smotri does not ask for your password. Cookies are read again for each request.	Войдите в аккаунт в браузере и выберите его выше. Smotri не запрашивает пароль. Cookies считываются заново при каждом запросе.
+	Until the project is saved, downloads use the chosen folder or Smotri's Downloads folder.	Пока проект не сохранён, файлы попадают в выбранную папку или в папку Downloads Smotri.
+	Bundled tools: yt-dlp, FFmpeg and Deno. No separate installation is needed.	Встроенные компоненты: yt-dlp, FFmpeg и Deno. Отдельная установка не требуется.
+	Download component is missing. Reinstall the complete Smotri application	Компонент загрузчика отсутствует. Установите полную сборку Smotri
+	Choose an existing Netscape cookies file in Settings	Выберите существующий файл cookies Netscape в настройках
+	Use a single recorded video link; playlists and live streams are not supported yet	Нужна ссылка на отдельное записанное видео; плейлисты и прямые эфиры пока не поддерживаются
+	No downloadable audio or video was found	Не найдено доступного видео или аудио
+	This site requires sign-in. Choose a signed-in browser or a fresh cookies file in Downloader settings.	Сайт требует входа. Выберите браузер с активным аккаунтом или свежий файл cookies в настройках загрузчика.
+	This link is not supported by the bundled downloader.	Встроенный загрузчик пока не поддерживает эту ссылку.
+	The site blocked the request. Try your browser cookies or retry later.	Сайт заблокировал запрос. Попробуйте cookies из браузера или повторите позже.
+	This quality is not available. Try Best available or Audio only.	Это качество недоступно. Попробуйте «Лучшее доступное» или «Только аудио».
+	Not enough disk space for the download.	Недостаточно места на диске.
+	DRM-protected media cannot be downloaded.	Скачивание материалов с DRM-защитой не поддерживается.
+	Download failed. Check the link, network and browser cookies, then retry.	Скачать не удалось. Проверьте ссылку, сеть и cookies браузера, затем повторите.
+	Could not start the bundled download component	Не удалось запустить компонент загрузчика
+	Download cancelled	Загрузка отменена
+	Download timed out. Try again.	Время ожидания загрузки истекло. Повторите попытку.
+	Preparing media for editing…	Подготовка файла для монтажа…
+	Cancel	Отмена
+
+	Remove Silence…	Удалить тишину…
+	Remove Duplicate Takes…	Удалить дубли…
+	Silence Removal	Тишина
+	Duplicate Takes	Дубли
+
+	Smotri Website	Сайт Смотри
+	Telegram — AKT.MP4	Telegram — AKT.MP4
+	YouTube — AKT.MP4	YouTube — AKT.MP4
+	Open-source video editor by AKT.MP4, based on FilmCraft. Original authors are credited below.	Открытый видеоредактор от AKT.MP4 на основе FilmCraft. Авторы оригинала указаны ниже.
+
+	Regional restrictions? Try NetFix VPN	Региональные ограничения? Попробуй NetFix VPN
+	Smotri	Смотри

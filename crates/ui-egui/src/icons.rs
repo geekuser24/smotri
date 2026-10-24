@@ -83,7 +83,7 @@ pub enum Icon {
     Undo,
     Redo,
     Bell,
-    /// Community chat (the ArtCraft Discord): a speech bubble with three dots. Our own drawing,
+    /// Community chat: a speech bubble with three dots. Our own drawing,
     /// not the Discord logo.
     Chat,
     /// Website: a globe.
@@ -238,7 +238,12 @@ pub fn paint(painter: &Painter, rect: Rect, icon: Icon, color: Color32) {
     let pen = Pen16 { painter, rect, color, width: 1.25 };
     use Icon::*;
     match icon {
-        Selection => pen.fill(&[(4.0, 2.0), (4.0, 13.0), (6.8, 10.4), (8.8, 14.6), (10.4, 13.9), (8.5, 9.8), (12.2, 9.6)]),
+        Selection => {
+            // Convex pieces: a concave arrow passed to convex_polygon produced a broken silhouette.
+            pen.fill(&[(3.0, 1.0), (3.0, 12.5), (6.5, 9.0)]);
+            pen.fill(&[(3.0, 1.0), (6.5, 9.0), (12.0, 9.0)]);
+            pen.fill(&[(6.0, 8.0), (8.0, 7.5), (11.0, 14.0), (9.0, 15.0)]);
+        }
         TrackSelectFwd => {
             pen.fill(&[(2.0, 3.0), (2.0, 11.0), (4.0, 9.2), (5.4, 12.2), (6.6, 11.6), (5.3, 8.7), (7.8, 8.5)]);
             pen.fill(&[(8.5, 4.5), (11.0, 7.0), (8.5, 9.5)]);

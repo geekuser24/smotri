@@ -11,6 +11,7 @@
 #![cfg_attr(not(test), deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable))]
 
 pub mod aaf_omf;
+pub mod audio_cleanup;
 pub mod autosave;
 pub mod captions;
 pub mod clip_ops;
@@ -55,6 +56,9 @@ pub mod source_monitor;
 pub mod sync;
 pub mod transcript;
 pub mod trim;
+pub mod voice_auto_edit;
+pub mod voice_edit;
+pub mod voice_transcript;
 pub mod voiceover;
 
 use std::sync::Arc;
@@ -472,6 +476,9 @@ pub struct Session {
     pub mask_jobs: Vec<masks::PendingTrack>,
     /// Scene Edit Detection jobs whose results are applied when they finish.
     pub scene_jobs: Vec<scene_detect::PendingScene>,
+    pub voice_auto_edits: Vec<voice_auto_edit::Pending>,
+    pub voice_transcripts: Vec<voice_transcript::Pending>,
+    pub audio_cleanup: Option<audio_cleanup::Review>,
     /// Effect presets (built-in + the user's, persisted in the data directory).
     pub presets: presets::PresetLibrary,
     /// Export presets (built-in + the user's, persisted in the data directory) and favourites.
@@ -576,6 +583,9 @@ impl Session {
             media_jobs: Vec::new(),
             mask_jobs: Vec::new(),
             scene_jobs: Vec::new(),
+            voice_auto_edits: Vec::new(),
+            voice_transcripts: Vec::new(),
+            audio_cleanup: None,
             presets: Default::default(),
             export_presets: Default::default(),
             export_queue: Default::default(),
@@ -671,6 +681,9 @@ impl Session {
         proxies::poll(self);
         masks::poll(self);
         scene_detect::poll(self);
+        voice_transcript::poll(self);
+        audio_cleanup::poll(self);
+        voice_auto_edit::poll(self);
         export_tools::pump_queue(self, false);
         panels::log_jobs(self);
         let Some(p) = self.persistence.as_mut() else { return };

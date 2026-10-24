@@ -531,7 +531,7 @@ fn narration_selection_reveals_covered_floating_tts_once_without_editing_the_pro
     }
     assert_eq!(ctx.layer_id_at(covered), Some(layer(PanelKind::Info)));
     assert_eq!(h.state().ui.tts, draft);
-    menus::invoke(h.state_mut(), &ctx, "window.panel.TextToSpeech", json!({})).unwrap();
+    h.state_mut().show_panel(PanelKind::TextToSpeech);
     for _ in 0..4 {
         step(&mut h);
     }

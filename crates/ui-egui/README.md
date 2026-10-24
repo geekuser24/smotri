@@ -100,3 +100,7 @@ buttons use `craft-ui::layout::fit_toolbar`; commands beyond the available width
 through More, including their selected state and Source/Program routing. A scrolling fallback
 retains all commands if even More cannot fit. `monitor_geometry` checks the painted readouts,
 control bounds, overflow actions and Source drag payloads across monitor widths and themes.
+
+## Jarvis voice control
+
+The header Jarvis toggle uses the native VoiceHost adapter and a bounded RU/EN command grammar. See [Jarvis](../../docs/jarvis.md) for setup, supported phrases and privacy.

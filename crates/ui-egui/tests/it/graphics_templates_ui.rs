@@ -93,7 +93,7 @@ impl Driver {
 fn browse_search_apply_and_edit_template_properties() {
     let mut d = Driver::demo("browse");
     d.ok("ui.set", json!({"workspace": "Captions and Graphics"}));
-    d.ok("ui.menu.invoke", json!({"id": "window.panel.EssentialGraphics"}));
+    d.ok("ui.panel.show", json!({"panel": "EssentialGraphics"}));
     d.ok("ui.set", json!({"gfxTemplates": {"tab": "browse"}}));
     d.frames(4);
     let items = d.ids("gfxTemplates.item.");
@@ -135,7 +135,7 @@ fn browse_search_apply_and_edit_template_properties() {
 fn drag_template_onto_the_timeline() {
     let mut d = Driver::demo("drag");
     d.ok("ui.set", json!({"workspace": "Captions and Graphics"}));
-    d.ok("ui.menu.invoke", json!({"id": "window.panel.EssentialGraphics"}));
+    d.ok("ui.panel.show", json!({"panel": "EssentialGraphics"}));
     d.ok("ui.set", json!({"gfxTemplates": {"tab": "browse", "query": "tag"}}));
     d.frames(4);
     let before = d.clips_named("Callout – Tag").len();
@@ -168,7 +168,7 @@ fn export_dialog_and_install_round_trip() {
     assert_eq!(list[0]["controls"][0]["kind"], "text");
     // the new template shows in Browse
     d.ok("ui.set", json!({"workspace": "Captions and Graphics"}));
-    d.ok("ui.menu.invoke", json!({"id": "window.panel.EssentialGraphics"}));
+    d.ok("ui.panel.show", json!({"panel": "EssentialGraphics"}));
     d.ok("ui.set", json!({"gfxTemplates": {"tab": "browse", "query": ""}}));
     d.frames(130);
     assert!(d.ids("gfxTemplates.item.").contains(&"gfxTemplates.item.user:ui-title".to_string()));

@@ -19,6 +19,9 @@ neural-voices = ["filmcraft-engine/neural-voices"]
 
 [dependencies]
 filmcraft-engine = { workspace = true }
+filmcraft-speech = { workspace = true }
+filmcraft-media = { workspace = true }
+ureq = { version = "3", default-features = false, features = ["rustls-no-provider", "platform-verifier"] }
 filmcraft-export = { workspace = true }
 filmcraft-project = { workspace = true }
 filmcraft-render = { workspace = true }
@@ -41,12 +44,19 @@ sys-locale = "0.3"
 # Help menu / About / Discord links in the system browser (MIT; as PhotoCraft).
 open = "5"
 
+# Jarvis streaming speech recognition (Rust TLS and bounded native audio capture).
+tungstenite = { version = "0.29", default-features = false, features = ["handshake", "rustls-tls-native-roots"] }
+base64 = "0.22"
+rustls = { version = "0.23", default-features = false, features = ["std", "tls12"] }
+rustls-rustcrypto = "0.0.2-alpha"
+
 [dev-dependencies]
 glob = "0.3"
 # graphics.rs: enumerate the real adapters in a test.
 pollster = "0.4"
 
 [target.'cfg(target_os = "macos")'.dependencies]
+security-framework = "3"
 muda = "0.21"
 objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSProcessInfo", "NSString", "NSArray"] }
 objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSApplication", "NSResponder", "NSWindow"] }

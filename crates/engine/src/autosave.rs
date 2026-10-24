@@ -158,6 +158,9 @@ pub struct Preferences {
     /// File layout version ([`crate::settings::PREFS_VERSION`]); older files are migrated on load.
     pub version: u32,
     pub general: settings::GeneralPrefs,
+    pub jarvis: settings::JarvisPrefs,
+    pub inserts: settings::InsertsPrefs,
+    pub downloader: settings::DownloaderPrefs,
     pub appearance: settings::AppearancePrefs,
     pub audio: AudioPrefs,
     pub audio_hardware: settings::AudioHardwarePrefs,
@@ -188,6 +191,9 @@ impl Default for Preferences {
         Self {
             version: settings::PREFS_VERSION,
             general: Default::default(),
+            jarvis: Default::default(),
+            inserts: Default::default(),
+            downloader: Default::default(),
             appearance: Default::default(),
             audio: Default::default(),
             audio_hardware: Default::default(),

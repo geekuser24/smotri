@@ -29,6 +29,62 @@ pub const PREFS_VERSION: u32 = 2;
 
 // ------------------------------------------------------------------ category values
 
+/// Availability of Jarvis; listening is always off at startup.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct JarvisPrefs {
+    pub enabled: bool,
+}
+impl Default for JarvisPrefs {
+    fn default() -> Self {
+        Self { enabled: true }
+    }
+}
+
+/// Automatic placement of downloaded inserts.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct InsertsPrefs {
+    pub add_to_timeline: bool,
+}
+impl Default for InsertsPrefs {
+    fn default() -> Self {
+        Self { add_to_timeline: true }
+    }
+}
+
+/// External downloader configuration; cookies themselves are never stored here.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct DownloaderPrefs {
+    pub ask_quality: bool,
+    pub quality: String,
+    pub beside_project: bool,
+    pub folder: String,
+    pub import_to_project: bool,
+    pub add_to_timeline: bool,
+    pub cookie_source: String,
+    pub cookie_file: String,
+    pub yt_dlp: String,
+    pub ffmpeg: String,
+}
+impl Default for DownloaderPrefs {
+    fn default() -> Self {
+        Self {
+            ask_quality: true,
+            quality: "1080".into(),
+            beside_project: true,
+            folder: String::new(),
+            import_to_project: true,
+            add_to_timeline: false,
+            cookie_source: "none".into(),
+            cookie_file: String::new(),
+            yt_dlp: String::new(),
+            ffmpeg: String::new(),
+        }
+    }
+}
+
 /// Settings ▸ General.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
@@ -37,7 +93,7 @@ pub struct GeneralPrefs {
     /// `zh-cn`, `de`, `ru`, `fr`, `id`, `it`, or `system` (the default: the operating system's preferred language when the
     /// interface has it, otherwise English).
     pub interface_language: String,
-    /// "At Startup": `showHome` (FilmCraft: the demo project), `openMostRecent`, `emptyProject`.
+    /// "At Startup": `showHome` (Smotri: the demo project), `openMostRecent`, `emptyProject`.
     pub at_startup: String,
     /// "When Opening a Project": `showOpenDialog` | `showHome`.
     pub when_opening_project: String,
@@ -403,7 +459,7 @@ impl LabelPrefs {
     }
 }
 
-/// The label colour preset FilmCraft ships with: the labels' own names and colours.
+/// The label colour preset Smotri ships with: the labels' own names and colours.
 pub const DEFAULT_LABEL_PRESET: &str = "Default";
 /// The folder of label colour presets, beside `preferences.json`.
 pub const LABEL_PRESETS_DIR: &str = "Label Presets";
@@ -861,7 +917,7 @@ pub struct Field {
     pub indent: bool,
     /// Only editable while this boolean key is on.
     pub enabled_by: Option<&'static str>,
-    /// Whether FilmCraft acts on the value (false = remembered for parity, no effect yet).
+    /// Whether Smotri acts on the value (false = remembered for parity, no effect yet).
     pub wired: bool,
 }
 
@@ -1107,6 +1163,53 @@ static CATEGORIES: &[Category] = &[
             ),
         ],
     },
+    // Native credentials are drawn by the UI and are never stored in Preferences.
+    Category { id: "jarvis", title: "Jarvis", rows: &[b("jarvis.enabled", "Enable Jarvis", true)] },
+    Category { id: "inserts", title: "Inserts", rows: &[b("inserts.addToTimeline", "Add to timeline after import", true)] },
+    Category {
+        id: "downloader",
+        title: "Downloader",
+        rows: &[
+            b("downloader.askQuality", "Choose quality before downloading", true),
+            f(
+                "downloader.quality",
+                "Default quality",
+                Kind::Choice(&[
+                    ("best", "Best available"),
+                    ("4320", "4320p"),
+                    ("2160", "2160p"),
+                    ("1440", "1440p"),
+                    ("1080", "1080p"),
+                    ("720", "720p"),
+                    ("480", "480p"),
+                    ("360", "360p"),
+                    ("audio", "Audio only (WAV)"),
+                ]),
+                true,
+            ),
+            b("downloader.besideProject", "Save downloads beside the project", true),
+            f("downloader.folder", "Download folder", Kind::Text, true),
+            b("downloader.importToProject", "Import downloads into Project", true),
+            b("downloader.addToTimeline", "Add downloads to the timeline", true),
+            f(
+                "downloader.cookieSource",
+                "Cookies",
+                Kind::Choice(&[
+                    ("none", "No cookies"),
+                    ("chrome", "Chrome"),
+                    ("edge", "Edge"),
+                    ("firefox", "Firefox"),
+                    ("safari", "Safari"),
+                    ("brave", "Brave"),
+                    ("file", "Netscape cookies file"),
+                ]),
+                true,
+            ),
+            f("downloader.cookieFile", "Cookies file path", Kind::Text, true),
+            f("downloader.ytDlp", "yt-dlp executable (empty = automatic)", Kind::Text, true),
+            f("downloader.ffmpeg", "FFmpeg executable (empty = automatic)", Kind::Text, true),
+        ],
+    },
     Category {
         id: "autoSave",
         title: "Auto Save",
@@ -1126,7 +1229,7 @@ static CATEGORIES: &[Category] = &[
                     b("autoSave.recoveryJournal", "Keep a recovery copy of unsaved changes", true),
                     sub("autoSave.recoveryIntervalSeconds", "Update it at least every", int(1.0, 600.0, "second(s)"), "autoSave.recoveryJournal", true),
                     Row::Note(
-                        "Changes are copied in the background a moment after each edit. If FilmCraft quits unexpectedly, they are offered the next time it starts.",
+                        "Changes are copied in the background a moment after each edit. If Smotri quits unexpectedly, they are offered the next time it starts.",
                     ),
                     Row::Custom("autoSaveStatus"),
                 ],
@@ -1282,7 +1385,7 @@ static CATEGORIES: &[Category] = &[
                 ],
             ),
             Row::Note(
-                "The media cache holds render previews of unsaved projects and other files FilmCraft can recreate. Deleting them is always safe; FilmCraft rebuilds them as needed.",
+                "The media cache holds render previews of unsaved projects and other files Smotri can recreate. Deleting them is always safe; Smotri rebuilds them as needed.",
             ),
         ],
     },
@@ -1308,7 +1411,7 @@ static CATEGORIES: &[Category] = &[
             b("playback.draftDecode", "Draft decoding at reduced playback resolution (H.264: faster, some frames less filtered)", true),
             f("playback.hardwareDecoding", "Hardware decoding", Kind::Choice(HW_DECODE), true),
             Row::Note(
-                "Hardware decoding: Auto uses the system's video decoder (VideoToolbox on macOS, Media Foundation on Windows, VA-API or NVDEC for H.264 and HEVC on Linux) for the streams it supports, and FilmCraft's own decoder for everything else or if the hardware fails. Media that is already open keeps its decoder until it is reopened.",
+                "Hardware decoding: Auto uses the system's video decoder (VideoToolbox on macOS, Media Foundation on Windows, VA-API or NVDEC for H.264 and HEVC on Linux) for the streams it supports, and Smotri's own decoder for everything else or if the hardware fails. Media that is already open keeps its decoder until it is reopened.",
             ),
         ],
     },
@@ -1317,7 +1420,7 @@ static CATEGORIES: &[Category] = &[
         title: "Plugins",
         rows: &[
             Row::Group("Plugins", &[b("plugins.developerMode", "Enable developer mode", false)]),
-            Row::Note("No plugins are installed. Changes will take effect the next time you start FilmCraft."),
+            Row::Note("No plugins are installed. Changes will take effect the next time you start Smotri."),
         ],
     },
     Category {

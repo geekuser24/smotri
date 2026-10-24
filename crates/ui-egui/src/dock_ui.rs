@@ -1,4 +1,4 @@
-//! FilmCraft's panel chrome and document tabs over the shared docking transactions.
+//! Smotri's panel chrome and document tabs over the shared docking transactions.
 
 use craft_ui::docking::{Action, DropTarget, Placement, Zone, resolve_drop};
 use egui::{Color32, Rect, Sense, Stroke, StrokeKind, pos2, vec2};

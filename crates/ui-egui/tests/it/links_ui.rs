@@ -90,8 +90,9 @@ fn community_links_everywhere() {
     for (id, label, _) in links::ALL {
         assert!(text.contains(id) && text.contains(label), "Help menu lists {id}");
     }
-    // Header: the Discord button is always there.
-    assert_eq!(d.ids("header.discord"), vec!["header.discord".to_string()]);
+    // Header: Jarvis replaces the Discord shortcut; community links remain in Help/About.
+    assert_eq!(d.ids("header.jarvis"), vec!["header.jarvis".to_string()]);
+    assert!(d.ids("header.discord").is_empty());
     d.snapshot("header");
     // About dialog: Discord first, then website, app page, GitHub, issues.
     d.ok("engine.execute", json!({"command": "app.about", "params": {}}));

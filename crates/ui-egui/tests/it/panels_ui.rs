@@ -171,6 +171,11 @@ fn every_panel_opens_from_the_window_menu() {
         ("ReferenceMonitor", "reference.gang"),
         ("ProjectNotes", "notes.text"),
     ] {
+        // Window entries now toggle presence. Start hidden, then verify the menu opens it.
+        let menu = d.ok("ui.menu.list", json!({}));
+        if menu.as_array().unwrap().iter().any(|item| item["id"] == format!("window.panel.{panel}") && item["checked"] == true) {
+            d.ok("ui.panel.close", json!({"panel": panel}));
+        }
         d.ok("ui.menu.invoke", json!({"id": format!("window.panel.{panel}")}));
         d.frames(3);
         assert!(d.has(&format!("panel.tab.{panel}")), "{panel} has no tab");
@@ -204,8 +209,8 @@ fn panel_menu_maximize_restores_and_an_empty_dock_reopens() {
         d.ok("ui.panel.close", json!({"panel": p.id()}));
     }
     assert_eq!(d.app().ui.dock, DockNode::Tabs { panels: vec![], active: 0 });
-    d.ok("ui.menu.invoke", json!({"id": "window.panel.Program"}));
-    d.ok("ui.menu.invoke", json!({"id": "window.panel.Timeline"}));
+    d.ok("ui.panel.show", json!({"panel": "Program"}));
+    d.ok("ui.panel.show", json!({"panel": "Timeline"}));
     d.frames(3);
     assert!(d.has("panel.tab.Program") && d.has("panel.tab.Timeline"));
 }
@@ -221,7 +226,7 @@ fn history_panel_menu_deletes_redoable_actions_and_clears_the_history() {
     }
     d.exec("edit.undo", json!({}));
     d.exec("edit.undo", json!({}));
-    d.ok("ui.menu.invoke", json!({"id": "window.panel.History"}));
+    d.ok("ui.panel.show", json!({"panel": "History"}));
     d.frames(3);
     let redo = |d: &mut Driver| d.exec("history.list", json!({}))["redo"].as_array().unwrap().len();
     assert_eq!(redo(&mut d), 2);
@@ -306,7 +311,7 @@ fn wheel_over_a_tab_strip_switches_tabs() {
     for _ in 0..10 {
         wheel(&mut d, -40.0);
     }
-    assert_eq!(shown(&mut d), PanelKind::History, "no wrap past the last tab");
+    assert_eq!(shown(&mut d), PanelKind::Downloader, "no wrap past the last tab");
 }
 
 #[test]
@@ -362,7 +367,7 @@ fn metadata_panel_edits_a_field_with_undo() {
     let item = d.app().session.project.items.values().filter(|i| i.as_media().is_some()).map(|i| i.id).min().unwrap();
     d.app().session.state.project_selection = vec![item];
     d.app().ui.focused = filmcraft_ui_egui::dock::PanelKind::Project;
-    d.ok("ui.menu.invoke", json!({"id": "window.panel.Metadata"}));
+    d.ok("ui.panel.show", json!({"panel": "Metadata"}));
     d.ok("ui.set", json!({"focused": "Project"}));
     d.frames(3);
     let name = d.app().session.project.item(item).unwrap().name.clone();
@@ -403,7 +408,7 @@ fn metadata_panel_edits_a_field_with_undo() {
 #[test]
 fn project_notes_panel_types_into_the_project_with_undo() {
     let mut d = Driver::demo();
-    d.ok("ui.menu.invoke", json!({"id": "window.panel.ProjectNotes"}));
+    d.ok("ui.panel.show", json!({"panel": "ProjectNotes"}));
     d.frames(3);
     let undo0 = d.app().session.history.undo.len();
     d.click("notes.text");
@@ -428,7 +433,7 @@ fn project_notes_panel_types_into_the_project_with_undo() {
 fn timecode_panel_rows_and_modes() {
     let mut d = Driver::demo();
     d.exec("playhead.set", json!({"timecode": "00:00:02:00"}));
-    d.ok("ui.menu.invoke", json!({"id": "window.panel.Timecode"}));
+    d.ok("ui.panel.show", json!({"panel": "Timecode"}));
     d.frames(3);
     assert_eq!(d.label("timecode.row.0"), "00:00:02:00");
     d.click("timecode.addRow");
@@ -461,7 +466,7 @@ fn timecode_panel_rows_and_modes() {
 fn events_and_progress_panels() {
     let mut d = Driver::demo();
     d.exec("events.clear", json!({}));
-    d.ok("ui.menu.invoke", json!({"id": "window.panel.Events"}));
+    d.ok("ui.panel.show", json!({"panel": "Events"}));
     d.frames(2);
     // a failed command shows up as an error row
     let r = d.call("engine.execute", json!({"command": "clip.rename", "params": {}}));
@@ -491,7 +496,7 @@ fn events_and_progress_panels() {
     job.progress.total.store(10, std::sync::atomic::Ordering::Relaxed);
     job.progress.done.store(4, std::sync::atomic::Ordering::Relaxed);
     d.app().session.jobs.push(job.clone());
-    d.ok("ui.menu.invoke", json!({"id": "window.panel.Progress"}));
+    d.ok("ui.panel.show", json!({"panel": "Progress"}));
     d.frames(3);
     assert!(d.label("progress.job.4242").contains("40 %"), "{}", d.label("progress.job.4242"));
     d.snapshot("panels-progress", Some("progress."));
@@ -513,7 +518,7 @@ fn events_and_progress_panels() {
 #[test]
 fn reference_monitor_parks_gangs_and_shows_scopes() {
     let mut d = Driver::demo();
-    d.ok("ui.menu.invoke", json!({"id": "window.panel.ReferenceMonitor"}));
+    d.ok("ui.panel.show", json!({"panel": "ReferenceMonitor"}));
     d.frames(3);
     assert_eq!(d.label("reference.timecode"), "00:00:00:00");
     d.exec("playhead.set", json!({"timecode": "00:00:03:00"}));
@@ -635,8 +640,9 @@ fn inspector_selection_driver() -> (Driver, filmcraft_project::ItemId, filmcraft
         })
         .unwrap();
     d.exec("project.view.set", json!({"view":"list"}));
-    d.ok("ui.menu.invoke", json!({"id":"window.panel.Metadata"}));
-    d.ok("ui.menu.invoke", json!({"id":"window.panel.Info"}));
+    d.ok("ui.panel.show", json!({"panel": "Metadata"}));
+    d.ok("ui.panel.show", json!({"panel": "Info"}));
+    d.frames(2);
     d.click("panel.tab.Project");
     d.ok("ui.menu.invoke", json!({"id":"projectPanel.openBin","params":{"bin":bin,"how":"inPlace"}}));
     d.click(&format!("project.item.{}", a.0));
@@ -674,7 +680,8 @@ fn metadata_keeps_the_timeline_item_when_its_tab_and_field_take_focus() {
 fn info_follows_the_timeline_item_and_keeps_sequence_information() {
     let (mut d, _, b, _) = inspector_selection_driver();
     let name = d.app().session.project.item(b).unwrap().name.clone();
-    d.click("panel.tab.Info");
+    d.ok("ui.panel.show", json!({"panel": "Info"}));
+    d.frames(2);
     assert!(d.harness.query_by_label(&name).is_some(), "Info must show the selected Timeline item's name");
     assert_eq!(d.label("info.item"), name, "the item header belongs to Info, not another panel");
     assert!(!d.label("info.sequence").is_empty());
@@ -690,21 +697,23 @@ fn inspectors_follow_reselected_project_items_and_clear_without_stale_targets() 
     let timeline_selection = d.app().session.state.selection.clone();
     let undo = d.app().session.history.undo.len();
     let playhead = d.app().session.playhead();
-    d.click("panel.tab.Info");
+    d.ok("ui.panel.show", json!({"panel": "Info"}));
+    d.frames(2);
     assert_eq!(d.label("info.item"), b_name);
     // Selection ownership also follows actual source clicks while both inspectors are hidden.
-    d.ok("ui.menu.invoke", json!({"id":"window.panel.Source"}));
+    d.ok("ui.panel.show", json!({"panel": "Source"}));
     d.click("panel.tab.Project");
     d.click(&format!("project.item.{}", a.0));
     d.click(&format!("timeline.clip.{}", clip.0));
-    d.ok("ui.menu.invoke", json!({"id":"window.panel.Metadata"}));
+    d.ok("ui.panel.show", json!({"panel": "Metadata"}));
     d.frames(3);
     assert_eq!(d.label("metadata.header"), format!("Clip: {b_name}"));
     d.click("panel.tab.Project");
     d.click(&format!("project.item.{}", a.0));
     d.click("panel.tab.Metadata");
     assert_eq!(d.label("metadata.header"), format!("Clip: {a_name}"));
-    d.click("panel.tab.Info");
+    d.ok("ui.panel.show", json!({"panel": "Info"}));
+    d.frames(2);
     assert_eq!(d.label("info.item"), a_name);
     assert_eq!(d.app().session.state.selection, timeline_selection);
     assert_eq!(d.app().session.state.project_selection, vec![a]);
@@ -717,18 +726,21 @@ fn inspectors_follow_reselected_project_items_and_clear_without_stale_targets() 
     assert!(d.app().session.state.selection.is_empty());
     d.click("panel.tab.Metadata");
     assert_eq!(d.label("metadata.header"), format!("Clip: {a_name}"));
-    d.click("panel.tab.Info");
+    d.ok("ui.panel.show", json!({"panel": "Info"}));
+    d.frames(2);
     assert_eq!(d.label("info.item"), a_name);
     d.click(&format!("timeline.clip.{}", clip.0));
     d.click("panel.tab.Project");
     d.ok("ui.key", json!({"key":"Cmd+Shift+A"}));
     assert!(d.app().session.state.project_selection.is_empty());
-    d.click("panel.tab.Info");
+    d.ok("ui.panel.show", json!({"panel": "Info"}));
+    d.frames(2);
     assert_eq!(d.label("info.item"), b_name);
     d.click("panel.tab.Metadata");
     assert_eq!(d.label("metadata.header"), format!("Clip: {b_name}"));
     d.ok("ui.set", json!({"theme":"light"}));
-    d.click("panel.tab.Info");
+    d.ok("ui.panel.show", json!({"panel": "Info"}));
+    d.frames(2);
     assert_eq!(d.label("info.item"), b_name, "theme and inspector changes keep the selection source");
     d.snapshot("panels-info-timeline-selection-light", Some("info."));
 
@@ -737,13 +749,15 @@ fn inspectors_follow_reselected_project_items_and_clear_without_stale_targets() 
     assert!(d.app().session.state.selection.is_empty());
     d.click("panel.tab.Metadata");
     assert!(d.has("metadata.empty"));
-    d.click("panel.tab.Info");
+    d.ok("ui.panel.show", json!({"panel": "Info"}));
+    d.frames(2);
     assert!(!d.has("info.item"));
     assert!(!d.label("info.sequence").is_empty(), "active sequence details remain with no clip selected");
 
     d.click("panel.tab.Project");
     d.click(&format!("project.item.{}", a.0));
-    d.click("panel.tab.Info");
+    d.ok("ui.panel.show", json!({"panel": "Info"}));
+    d.frames(2);
     assert_eq!(d.label("info.item"), a_name);
     d.exec("file.newProject", json!({"name":"Fresh inspector project"}));
     d.frames(3);
@@ -767,7 +781,8 @@ fn inspector_source_defaults_when_loading_an_older_ui_state() {
 fn middle_closing_an_inactive_project_tab_keeps_the_inspector_target() {
     let (mut d, _, b, _) = inspector_selection_driver();
     let name = d.app().session.project.item(b).unwrap().name.clone();
-    d.click("panel.tab.Info");
+    d.ok("ui.panel.show", json!({"panel": "Info"}));
+    d.frames(2);
     assert_eq!(d.label("info.item"), name);
     assert!(d.has("panel.tab.Project"), "the inactive Project tab must be visible before closing it");
     let project = serde_json::to_value(&d.app().session.project).unwrap();

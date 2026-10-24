@@ -137,19 +137,35 @@ pub const UI_COMMANDS: &[UiCommand] = &[
     uic!("mode.import", "Import", [], None),
     uic!("mode.edit", "Edit", [], None),
     uic!("mode.export", "Export", ["File", "Export"], Some("Cmd+M")),
-    uic!("help.discord", "Join the ArtCraft Discord…", ["Help"], None),
-    uic!("help.website", "ArtCraft Website", ["Help"], None),
-    uic!("help.appPage", "FilmCraft on getartcraft.com", ["Help"], None),
-    uic!("help.github", "FilmCraft on GitHub", ["Help"], None),
+    uic!("jarvis.askShake", "Choose shake preset", [], None),
+    uic!("jarvis.choose", "Answer Jarvis", [], None),
+    uic!("jarvis.toggle", "Toggle voice control", ["Edit"], None),
+    uic!("help.discord", "Telegram — AKT.MP4", ["Help"], None),
+    uic!("help.website", "Smotri Website", ["Help"], None),
+    uic!("help.appPage", "YouTube — AKT.MP4", ["Help"], None),
+    uic!("help.github", "Smotri on GitHub", ["Help"], None),
     uic!("help.reportIssue", "Report an Issue…", ["Help"], None),
+    uic!("help.netfix", "NetFix VPN", ["Help"], None),
     uic!("help.revealLogFiles", "Reveal Log Files…", ["Help"], None),
     uic!("help.systemCompatibilityReport", "System Compatibility Report…", ["Help"], None),
-    uic!("app.about", "About FilmCraft", ["Help"], None),
+    uic!("app.about", "About Smotri", ["Help"], None),
     uic!("app.keyboardShortcuts", "Keyboard Shortcuts…", ["Edit"], Some("Cmd+Alt+K")),
     uic!("app.settings.general", "General…", ["Edit", "Preferences"], Some("Cmd+,")),
     uic!("app.settings.appearance", "Appearance…", ["Edit", "Preferences"], None),
     uic!("app.settings.audio", "Audio…", ["Edit", "Preferences"], None),
     uic!("app.settings.audioHardware", "Audio Hardware…", ["Edit", "Preferences"], None),
+    uic!("app.settings.inserts", "Inserts", ["Edit", "Preferences"], None),
+    uic!("inserts.search", "Search GIFs", [], None),
+    uic!("inserts.import", "Import GIF", [], None),
+    uic!("inserts.inspect", "Inspect Inserts", [], None),
+    uic!("app.settings.downloader", "Downloader", ["Edit", "Preferences"], None),
+    uic!("downloader.probe", "Check download link", [], None),
+    uic!("downloader.download", "Download media", [], None),
+    uic!("downloader.cancel", "Cancel download", [], None),
+    uic!("downloader.import", "Import download", [], None),
+    uic!("downloader.reveal", "Show download in folder", [], None),
+    uic!("downloader.inspect", "Inspect downloader", [], None),
+    uic!("app.settings.jarvis", "Jarvis", ["Edit", "Preferences"], None),
     uic!("app.settings.autoSave", "Auto Save…", ["Edit", "Preferences"], None),
     uic!("app.settings.color", "Color…", ["Edit", "Preferences"], None),
     uic!("app.settings.graphics", "Graphics…", ["Edit", "Preferences"], None),
@@ -179,6 +195,33 @@ pub fn targets_source(app: &FilmcraftApp, params: &Value) -> bool {
 
 /// Execute a UI or engine command by id.
 pub fn invoke(app: &mut FilmcraftApp, ctx: &egui::Context, id: &str, mut params: Value) -> Result<Value, String> {
+    if id == "transcript.generate"
+        && params.as_object().is_some_and(|p| p.is_empty())
+        && app.session.transcriber.as_ref().is_some_and(|t| t.id() == "elevenlabs-scribe-v2")
+    {
+        return app.session.execute("voice.transcribe", json!({"scope":"timeline"})).map_err(|e| e.to_string());
+    }
+
+    if id.starts_with("downloader.") {
+        return crate::downloader::command(app, id, params);
+    }
+    if id.starts_with("inserts.") {
+        return crate::inserts::command(app, id, params);
+    }
+    if matches!(id, "jarvis.askShake" | "jarvis.choose") {
+        return crate::jarvis::clarification_command(app, ctx, id, params);
+    }
+    if id == "jarvis.toggle" {
+        if !app.session.prefs.jarvis.enabled {
+            return Err(crate::i18n::t("Enable Jarvis in Settings → Jarvis").into());
+        }
+        app.jarvis.toggle();
+        app.status(app.jarvis.feedback.clone());
+        return Ok(json!({"active": app.jarvis.active, "ready": app.jarvis.ready}));
+    }
+    if id == "jarvis.settings" {
+        return crate::panels::settings::open(app, "jarvis");
+    }
     if id == "edit.selectAll" && (crate::panels::graphics::select_all_edited_text(app) || crate::panels::effect_controls::select_all_keyframes(app)) {
         return Ok(Value::Null);
     }
@@ -256,7 +299,11 @@ pub fn invoke(app: &mut FilmcraftApp, ctx: &egui::Context, id: &str, mut params:
     }
     if let Some(rest) = id.strip_prefix("window.panel.") {
         let p = PanelKind::from_name(rest).ok_or_else(|| format!("unknown panel `{rest}`"))?;
-        app.show_panel(p);
+        if app.ui.dock.contains(p) || app.ui.floating.iter().any(|group| group.panels.contains(&p)) {
+            app.apply_dock(craft_ui::docking::Action::Close { panel: p })?;
+        } else {
+            app.show_panel(p);
+        }
         return Ok(Value::Null);
     }
     if let Some(r) = crate::panels::workspaces::route(app, id, &params) {
@@ -283,6 +330,9 @@ pub fn invoke(app: &mut FilmcraftApp, ctx: &egui::Context, id: &str, mut params:
     }
     if let Some(r) = crate::panels::voiceover::route(app, ctx, id, &params) {
         return r;
+    }
+    if matches!(id, "audioCleanup.openSilence" | "audioCleanup.openDuplicates") {
+        return crate::panels::audio_cleanup::open(app, id == "audioCleanup.openDuplicates");
     }
     if let Some(r) = crate::panels::clip_dialogs::route(app, id, &params) {
         return r;
@@ -691,7 +741,7 @@ pub const MENUS: [&str; 9] = ["File", "Edit", "Clip", "Sequence", "Markers", "Gr
 /// Labels only the native macOS app menu shows, with no command in the menu tree behind them: the
 /// Settings submenu and the predefined Hide, Hide Others and Quit items. They are translated through
 /// the catalogs like menu labels (`apps/filmcraft/src/native_menu.rs`).
-pub const NATIVE_APP_MENU: [&str; 4] = ["Settings", "Hide FilmCraft", "Hide Others", "Quit FilmCraft"];
+pub const NATIVE_APP_MENU: [&str; 4] = ["Settings", "Hide Smotri", "Hide Others", "Quit Smotri"];
 
 pub fn menu_items(app: &FilmcraftApp) -> Vec<MenuItem> {
     let mut v = menu_items_for(&app.session);
@@ -711,6 +761,9 @@ pub fn menu_items(app: &FilmcraftApp) -> Vec<MenuItem> {
             "app.language.italian" => it.checked = Some(app.ui.language == crate::i18n::Language::It),
             "app.language.korean" => it.checked = Some(app.ui.language == crate::i18n::Language::Ko),
             _ => {}
+        }
+        if let Some(panel) = it.id.strip_prefix("window.panel.").and_then(PanelKind::from_name) {
+            it.checked = Some(app.ui.dock.contains(panel) || app.ui.floating.iter().any(|group| group.panels.contains(&panel)));
         }
         if it.id.starts_with("view.") {
             it.checked = crate::panels::monitor_view::checked(app, &it.id).or(crate::panels::menu_dialogs::checked(app, &it.id));
@@ -857,7 +910,7 @@ pub fn bindings(app: &FilmcraftApp) -> Vec<KeyBinding> {
     v.extend(shifted);
     // `+` is the `=` key with Shift on US layouts and its own key on others and the keypad: a chord
     // on `=` takes it too, unless something is bound to `+` itself. Otherwise Ctrl+Plus fell
-    // through to egui's interface zoom while Ctrl+- and Ctrl+0 were taken by FilmCraft
+    // through to egui's interface zoom while Ctrl+- and Ctrl+0 were taken by Smotri
     // shortcuts, so the interface grew and could not shrink back (#2253).
     let plus: Vec<KeyBinding> = v
         .iter()
@@ -1023,7 +1076,7 @@ fn menu_entry(ui: &mut egui::Ui, it: &MenuItem, auto: &mut crate::automation::Re
         b = b.shortcut_text(shortcut_text(s));
     }
     let mut r = ui.add_enabled(it.enabled, b);
-    // Help items say whether they open the web browser (and which address) or stay in FilmCraft
+    // Help items say whether they open the web browser (and which address) or stay in Smotri
     if let Some(hint) = crate::links::menu_hint(&it.id) {
         r = r.on_hover_text(hint);
     }
@@ -1089,6 +1142,25 @@ mod parse_shortcut_tests {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn window_menu_tracks_docked_and_floating_panels_and_toggles() {
+        let mut app = FilmcraftApp::new(filmcraft_engine::Session::default());
+        let ctx = egui::Context::default();
+        let checked = |app: &FilmcraftApp| menu_items(app).into_iter().find(|i| i.id == "window.panel.Source").and_then(|i| i.checked);
+        assert_eq!(checked(&app), Some(true));
+        invoke(&mut app, &ctx, "window.panel.Source", json!({})).unwrap();
+        assert_eq!(checked(&app), Some(false));
+        invoke(&mut app, &ctx, "window.panel.Source", json!({})).unwrap();
+        assert_eq!(checked(&app), Some(true));
+        invoke(&mut app, &ctx, "window.floatPanel", json!({"panel":"Source","rect":[100.0,100.0,400.0,300.0]})).unwrap();
+        assert_eq!(checked(&app), Some(true));
+        invoke(&mut app, &ctx, "window.panel.Source", json!({})).unwrap();
+        assert_eq!(checked(&app), Some(false));
+        invoke(&mut app, &ctx, "window.panel.Source", json!({})).unwrap();
+        assert_eq!(checked(&app), Some(true));
+        assert!(app.ui.floating.iter().any(|g| g.panels.contains(&PanelKind::Source)));
+    }
 
     /// What `cargo xtask parity` measures: every item sits under a top-level menu, and Window ▸
     /// Workspaces lists the built-in workspaces before the layout commands, none checked.

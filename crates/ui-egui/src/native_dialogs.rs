@@ -35,9 +35,9 @@ pub enum FileDialog {
     OpenFiles { exts: Vec<String> },
     /// Choose one file.
     OpenFile { filter: String, exts: Vec<String> },
-    /// Choose a FilmCraft project to open.
+    /// Choose a Smotri project to open.
     OpenProject,
-    /// Save a FilmCraft project, suggesting `name`.
+    /// Save a Smotri project, suggesting `name`.
     SaveProject { name: String },
     /// Save a file, suggesting `name`.
     SaveAs { filter: String, exts: Vec<String>, name: String },

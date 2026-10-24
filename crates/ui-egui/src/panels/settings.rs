@@ -56,6 +56,8 @@ pub struct SettingsDraft {
 /// Open the dialog on a category page.
 pub fn open(app: &mut FilmcraftApp, page: &str) -> Result<Value, String> {
     let cat = settings::category(page).ok_or_else(|| format!("unknown settings category `{page}`"))?;
+    app.jarvis.clear_key_draft();
+    app.inserts.clear_key_draft();
     app.ui.settings = Some(SettingsDraft { page: cat.id.into(), values: app.session.prefs.to_value(), ..Default::default() });
     app.dialog = Some(Dialog::Preferences);
     Ok(json!({"dialog": "settings", "page": cat.id}))
@@ -126,7 +128,7 @@ pub fn appearance_context_menu(app: &mut FilmcraftApp, ui: &mut Ui) {
 const APPEARANCE_KEYS: &[&str] =
     &["appearance.appearanceMode", "appearance.lightTheme", "appearance.darkTheme", "appearance.colorTheme", "appearance.favoriteThemes"];
 
-/// A small FilmCraft editor painted with `t`'s colours: the header with the Import / Edit / Export
+/// A small Smotri editor painted with `t`'s colours: the header with the Import / Edit / Export
 /// tabs, the Source and Program monitors, the Project panel, the tools, the Timeline with video and
 /// audio clips and the playhead, and the audio meters (the Editing workspace).
 fn theme_preview(ui: &mut Ui, t: &Tokens, width: f32) {
@@ -750,7 +752,7 @@ fn custom(app: &mut FilmcraftApp, ui: &mut Ui, d: &mut SettingsDraft, name: &str
         "memoryInfo" => {
             let (used, budget) = app.frames.cache_usage();
             note(ui, &t, &tlf!("Decoded frames held for the monitors and thumbnails: {used} of {budget}.", used = mb(used as u64), budget = mb(budget as u64)));
-            note(ui, &t, tl!("FilmCraft keeps the rest of the RAM free for other applications."));
+            note(ui, &t, tl!("Smotri keeps the rest of the RAM free for other applications."));
         }
         "mediaCacheInfo" => {
             if d.cache_info.is_null() {
@@ -894,7 +896,16 @@ pub fn show(app: &mut FilmcraftApp, ctx: &egui::Context) -> bool {
                 ui.set_height(BODY_H);
                 let page = egui::ScrollArea::vertical().id_salt(("settings-page", cat.id)).auto_shrink([false, false]).max_height(BODY_H).show(ui, |ui| {
                     ui.spacing_mut().item_spacing.y = 6.0;
-                    rows(app, ui, &mut d, cat.rows);
+                    if cat.id == "jarvis" {
+                        crate::jarvis::settings_page(app, ui, &mut d.values);
+                    } else if cat.id == "inserts" {
+                        crate::inserts::settings_page(app, ui, &mut d.values);
+                    } else {
+                        rows(app, ui, &mut d, cat.rows);
+                        if cat.id == "downloader" {
+                            crate::downloader::settings_help(app, ui);
+                        }
+                    }
                     if !d.message.is_empty() {
                         ui.add_space(6.0);
                         note(ui, &t, &d.message);
@@ -909,7 +920,12 @@ pub fn show(app: &mut FilmcraftApp, ctx: &egui::Context) -> bool {
             if button(app, ui, "settings.help", tl!("Help"), false) {
                 crate::links::open(app, ctx, &format!("{}/blob/main/docs/project-files.md#settings", crate::links::GITHUB));
             }
-            if button(app, ui, "settings.reset", tl!("Reset…"), false) {
+            let reset = button(app, ui, "settings.reset", tl!("Reset…"), false);
+            if reset && d.page == "jarvis" {
+                app.jarvis.clear_key_draft();
+            } else if reset && d.page == "inserts" {
+                app.inserts.clear_key_draft();
+            } else if reset {
                 // this category back to its defaults (OK applies it)
                 let defaults = filmcraft_engine::autosave::Preferences::default().to_value();
                 let keep = get(&d.values, "general.recentProjects").clone();
@@ -928,6 +944,14 @@ pub fn show(app: &mut FilmcraftApp, ctx: &egui::Context) -> bool {
         });
         ui.add_space(14.0);
     });
+    if apply && let Err(error) = app.jarvis.apply_key_draft() {
+        d.message = error;
+        apply = false;
+    }
+    if apply && let Err(error) = app.inserts.apply_key_draft() {
+        d.message = error;
+        apply = false;
+    }
     if apply {
         let mut changes = Map::new();
         diff("", &app.session.prefs.to_value(), &d.values, &mut changes);
@@ -945,6 +969,9 @@ pub fn show(app: &mut FilmcraftApp, ctx: &egui::Context) -> bool {
     }
     if !close {
         app.ui.settings = Some(d);
+    } else {
+        app.jarvis.clear_key_draft();
+        app.inserts.clear_key_draft();
     }
     !close
 }
@@ -1053,7 +1080,7 @@ mod tests {
         app.apply_prefs(&ctx);
         assert_eq!(app.tokens.kind, ThemeKind::Light);
         assert!(!app.ui.dark);
-        assert_eq!(ctx.theme(), egui::Theme::Light, "egui's style follows FilmCraft's choice");
+        assert_eq!(ctx.theme(), egui::Theme::Light, "egui's style follows Smotri's choice");
         system.store(1, Ordering::Relaxed);
         app.apply_prefs(&ctx);
         assert_eq!(app.tokens.kind, ThemeKind::Dark);

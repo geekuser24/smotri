@@ -92,6 +92,23 @@ pub fn show(app: &mut FilmcraftApp, ui: &mut egui::Ui, rect: Rect) {
     }
 }
 
+/// Draw an original tool glyph beside the native pointer without changing its hotspot or hit tests.
+/// Native resize/locked/drag cursors keep their contextual meaning.
+pub(super) fn cursor_badge(ui: &egui::Ui, area: Rect, tool: Tool) {
+    if tool == Tool::Selection || !ui.rect_contains_pointer(area) {
+        return;
+    }
+    let Some(pointer) = ui.ctx().pointer_hover_pos() else { return };
+    let bounds = ui.ctx().content_rect();
+    let x = (pointer.x + 18.0).min(bounds.right() - 28.0).max(bounds.left());
+    let y = (pointer.y + 20.0).min(bounds.bottom() - 28.0).max(bounds.top());
+    let badge = Rect::from_min_size(pos2(x, y), vec2(26.0, 26.0));
+    let painter = ui.ctx().layer_painter(egui::LayerId::new(egui::Order::Tooltip, egui::Id::new("active-tool-cursor")));
+    painter.rect_filled(badge, 5.0, egui::Color32::from_rgba_unmultiplied(24, 24, 28, 235));
+    painter.rect_stroke(badge, 5.0, egui::Stroke::new(1.0, egui::Color32::from_gray(150)), egui::StrokeKind::Inside);
+    icons::paint(&painter, badge.shrink(4.0), tool.icon(), egui::Color32::WHITE);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

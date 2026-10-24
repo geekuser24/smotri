@@ -3519,6 +3519,10 @@ fn build() -> Vec<CommandSpec> {
     v.extend(crate::presets::commands());
     v.extend(crate::export_tools::commands());
     v.extend(crate::transcript::commands());
+    v.extend(crate::voice_auto_edit::commands());
+    v.extend(crate::voice_edit::commands());
+    v.extend(crate::voice_transcript::commands());
+    v.extend(crate::audio_cleanup::commands());
     v.extend(crate::panels::commands());
     v.extend(crate::scopes::commands());
     v.extend(crate::remix::commands());

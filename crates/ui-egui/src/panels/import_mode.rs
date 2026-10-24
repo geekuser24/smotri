@@ -10,7 +10,8 @@ use crate::theme::Tokens;
 pub fn show(app: &mut FilmcraftApp, ui: &mut egui::Ui, rect: Rect) {
     let t = app.tokens;
     ui.painter().rect_filled(rect, t.radius, t.panel_bg);
-    ui.painter().text(rect.min + vec2(24.0, 30.0), Align2::LEFT_CENTER, tl!("Import"), Tokens::semibold(22.0), t.text);
+    crate::brand::paint_wordmark(ui, rect.min + vec2(24.0, 30.0), 40.0, app.ui.dark);
+    ui.painter().text(rect.min + vec2(76.0, 30.0), Align2::LEFT_CENTER, tl!("Smotri"), Tokens::semibold(24.0), t.text);
     ui.painter().text(
         rect.min + vec2(24.0, 58.0),
         Align2::LEFT_CENTER,
@@ -46,14 +47,14 @@ pub fn show(app: &mut FilmcraftApp, ui: &mut egui::Ui, rect: Rect) {
     }
     let y = recent(app, ui, rect, 90.0 + 150.0 + 36.0);
     // Community and project links.
-    // ArtCraft wordmark (first-party trademark, docs/brand/), then the section title.
+    // Smotri eyes mark and creator links.
     let logo = crate::brand::paint_wordmark(ui, rect.min + vec2(24.0, y), 15.0, app.ui.dark);
     let tx = logo.map_or(rect.min.x + 24.0, |r| r.max.x + 12.0);
-    ui.painter().text(pos2(tx, rect.min.y + y), Align2::LEFT_CENTER, tl!("Community"), Tokens::semibold(15.0), t.text);
+    ui.painter().text(pos2(tx, rect.min.y + y), Align2::LEFT_CENTER, tl!("Smotri"), Tokens::semibold(15.0), t.text);
     let mut x = rect.min.x + 24.0;
     for (i, (id, label, url)) in crate::links::ALL.iter().take(4).enumerate() {
         let primary = i == 0;
-        let label = if primary { tl!("Join us on Discord") } else { crate::i18n::t(label) };
+        let label = if primary { tl!("Telegram — AKT.MP4") } else { crate::i18n::t(label) };
         let g = ui.painter().layout_no_wrap(label.to_string(), Tokens::ui(13.0), t.text);
         let r = Rect::from_min_size(pos2(x, rect.min.y + y + 18.0), vec2(g.size().x + 44.0, 34.0));
         let resp = ui.interact(r, egui::Id::new(("imp-link", *id)), Sense::click()).on_hover_text(*url);
@@ -71,6 +72,15 @@ pub fn show(app: &mut FilmcraftApp, ui: &mut egui::Ui, rect: Rect) {
             crate::links::open(app, &ctx, url);
         }
         x = r.max.x + 12.0;
+    }
+    let label = tl!("Regional restrictions? Try NetFix VPN");
+    let g = ui.painter().layout_no_wrap(label.to_string(), Tokens::ui(12.0), t.text_dim);
+    let r = Rect::from_min_size(pos2(rect.min.x + 24.0, rect.min.y + y + 66.0), g.size());
+    let response = ui.interact(r, egui::Id::new("import.netfix"), Sense::click()).on_hover_text(crate::links::NETFIX);
+    app.auto.add("import.link.netfix", r, label);
+    ui.painter().galley(r.min, g, if response.hovered() { t.accent } else { t.text_dim });
+    if response.clicked() {
+        crate::links::open(app, &ctx, crate::links::NETFIX);
     }
 }
 

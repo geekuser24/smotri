@@ -1,29 +1,31 @@
 //! Community and project links (Help menu, About dialog, header Discord button, Home screen).
 //!
-//! FilmCraft is part of the ArtCraft family: the community lives on the ArtCraft Discord, every
-//! app has a page on the ArtCraft website and a public GitHub repository.
+//! Public Smotri links. Legacy command IDs are retained for saved shortcuts.
 
 /// The app's short name, used in the website and repository URLs.
-pub const APP: &str = "filmcraft";
+pub const APP: &str = "smotri";
 
-/// The ArtCraft community Discord.
-pub const DISCORD: &str = "https://discord.gg/artcraft";
-/// The ArtCraft website.
-pub const WEBSITE: &str = "https://getartcraft.com";
-/// FilmCraft's page on the ArtCraft website.
-pub const APP_PAGE: &str = "https://getartcraft.com/apps/filmcraft";
-/// FilmCraft's source repository.
-pub const GITHUB: &str = "https://github.com/storytold/filmcraft";
-/// New issue on FilmCraft's repository.
-pub const ISSUES: &str = "https://github.com/storytold/filmcraft/issues";
+/// The creator’s Telegram channel.
+pub const DISCORD: &str = "https://t.me/aktmp4";
+/// The Smotri website.
+pub const WEBSITE: &str = "https://smotri.cc";
+/// The creator’s YouTube channel.
+pub const APP_PAGE: &str = "https://www.youtube.com/@akt.mp4";
+/// Smotri's source repository.
+pub const GITHUB: &str = "https://github.com/geekuser24/smotri";
+/// New issue on Smotri's repository.
+pub const ISSUES: &str = "https://github.com/geekuser24/smotri/issues";
 
 /// (command id, label, url) for every link, in menu order.
-pub const ALL: [(&str, &str, &str); 5] = [
-    ("help.discord", "Join the ArtCraft Discord…", DISCORD),
-    ("help.website", "ArtCraft Website", WEBSITE),
-    ("help.appPage", "FilmCraft on getartcraft.com", APP_PAGE),
-    ("help.github", "FilmCraft on GitHub", GITHUB),
+pub const NETFIX: &str = "https://connect.netfix.app";
+
+pub const ALL: [(&str, &str, &str); 6] = [
+    ("help.discord", "Telegram — AKT.MP4", DISCORD),
+    ("help.website", "Smotri Website", WEBSITE),
+    ("help.appPage", "YouTube — AKT.MP4", APP_PAGE),
+    ("help.github", "Smotri on GitHub", GITHUB),
     ("help.reportIssue", "Report an Issue…", ISSUES),
+    ("help.netfix", "NetFix VPN", NETFIX),
 ];
 
 /// A link the web browser couldn't open (`ui.failedLink`): the address and the reason.
@@ -39,7 +41,7 @@ pub fn url_for(command: &str) -> Option<&'static str> {
 }
 
 /// What a Help menu item does, shown when the pointer rests on it: the address a link opens in
-/// the web browser, or that the item stays inside FilmCraft.
+/// the web browser, or that the item stays inside Smotri.
 pub fn menu_hint(command: &str) -> Option<String> {
     let url = if command == "help.filmcraftHelp" { Some(crate::panels::keyboard::HELP_URL) } else { url_for(command) };
     if let Some(url) = url {
@@ -49,7 +51,7 @@ pub fn menu_hint(command: &str) -> Option<String> {
         match command {
             "help.revealLogFiles" => tl!("Saves this session's log and shows it in your file manager."),
             "help.systemCompatibilityReport" => tl!("Shows a report on this computer."),
-            "app.about" => tl!("Shows the version, community links and credits in a FilmCraft window."),
+            "app.about" => tl!("Shows the version, community links and credits in a Smotri window."),
             _ => return None,
         }
         .to_string(),
@@ -126,8 +128,8 @@ mod tests {
 
     #[test]
     fn urls_follow_the_artcraft_scheme() {
-        assert_eq!(APP_PAGE, format!("{WEBSITE}/apps/{APP}"));
-        assert_eq!(GITHUB, format!("https://github.com/storytold/{APP}"));
+        assert_eq!(APP_PAGE, "https://www.youtube.com/@akt.mp4");
+        assert_eq!(GITHUB, format!("https://github.com/geekuser24/{APP}"));
         assert!(ALL.iter().all(|(id, _, u)| id.starts_with("help.") && u.starts_with("https://")));
         assert_eq!(url_for("help.discord"), Some(DISCORD));
         assert_eq!(url_for("help.nope"), None);

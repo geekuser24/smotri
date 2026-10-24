@@ -1,4 +1,4 @@
-//! The FilmCraft egui frontend.
+//! The Smotri egui frontend.
 //!
 //! Thin by design: all project changes go through `filmcraft_engine::Session::execute`; this crate
 //! owns only presentation state ([`state::UiState`]), GPU textures, the playback clock and the
@@ -42,11 +42,14 @@ mod dock_ui;
 /// Thumbnail textures kept before the least recently used are freed (each is up to 320 px wide).
 const MAX_THUMB_TEXTURES: usize = 512;
 
+pub mod downloader;
 pub mod frames;
 pub mod graphics_notice;
 pub mod header;
 pub mod i18n;
 pub mod icons;
+pub mod inserts;
+pub mod jarvis;
 pub mod links;
 pub mod menus;
 pub mod native_dialogs;
@@ -171,7 +174,7 @@ pub struct HostHooks {
     /// uses `egui::Context::system_theme`.
     pub system_theme: Option<SystemThemeFn>,
     /// Files or an image on the system clipboard, for Paste in the Timeline and the Project panel
-    /// (#611). Without it Paste only pastes clips copied in FilmCraft.
+    /// (#611). Without it Paste only pastes clips copied in Smotri.
     pub clipboard_media: Option<Box<dyn FnMut() -> Option<ClipboardMedia>>>,
 }
 
@@ -280,7 +283,7 @@ pub(crate) const EXPORT_SAVE_DIALOGS: [(&str, &str, &str); 7] = [
     ("file.exportFcpxml", "FCPXML", "fcpxml"),
     ("file.exportOtio", "OpenTimelineIO", "otio"),
     ("file.exportAle", "Avid Log Exchange", "ale"),
-    ("file.exportSelectionProject", "FilmCraft Project", "fcproj"),
+    ("file.exportSelectionProject", "Smotri Project", "fcproj"),
 ];
 
 pub struct FilmcraftApp {
@@ -294,6 +297,10 @@ pub struct FilmcraftApp {
     /// Audio during scrubbing (#211).
     pub scrub: scrub::ScrubAudio,
     pub hooks: HostHooks,
+    pub jarvis: jarvis::Jarvis,
+    pub audio_cleanup: panels::audio_cleanup::State,
+    pub inserts: inserts::Inserts,
+    pub downloader: downloader::Downloader,
     pub dialog: Option<Dialog>,
     pub file_dialogs: panels::file_dialogs::FileDialogState,
     /// The native file dialog the host is showing ([`Self::pick`]).
@@ -562,6 +569,10 @@ impl FilmcraftApp {
             audio: None,
             scrub: Default::default(),
             hooks: HostHooks::default(),
+            jarvis: jarvis::Jarvis::default(),
+            audio_cleanup: Default::default(),
+            inserts: inserts::Inserts::default(),
+            downloader: downloader::Downloader::default(),
             // Unsaved changes left by a session that died are offered first thing.
             dialog: recovery.then_some(Dialog::Recovery),
             file_dialogs: Default::default(),
@@ -715,6 +726,9 @@ impl FilmcraftApp {
     /// Make the UI follow the settings after they change (theme, tooltips, frame cache budget,
     /// play after rendering, audio device).
     pub fn apply_prefs(&mut self, ctx: &egui::Context) {
+        if !self.session.prefs.jarvis.enabled && self.jarvis.active {
+            self.jarvis.stop();
+        }
         self.apply_ui_scale(ctx);
         // Appearance Mode ▸ Sync with system: follow the system while running. The host reports
         // changes as they happen (no polling) and wakes the UI only when the value changes.
@@ -2020,13 +2034,13 @@ impl FilmcraftApp {
 }
 
 impl FilmcraftApp {
-    /// The "FilmCraft hit an error" window after a caught UI panic. Automation ids:
+    /// The "Smotri hit an error" window after a caught UI panic. Automation ids:
     /// `error.dismiss`, `error.save`.
     fn error_window(&mut self, ctx: &egui::Context) {
         let Some(msg) = self.ui_error.clone() else { return };
         let mut close = false;
-        egui::Window::new(tl!("FilmCraft hit an error"))
-            .id(egui::Id::new("FilmCraft hit an error"))
+        egui::Window::new(tl!("Smotri hit an error"))
+            .id(egui::Id::new("Smotri hit an error"))
             .collapsible(false)
             .resizable(false)
             .pivot(egui::Align2::CENTER_CENTER)
@@ -2165,6 +2179,15 @@ impl eframe::App for FilmcraftApp {
         if ctx.input(|i| i.viewport().close_requested()) && panels::clip_dialogs::intercept_quit(self) {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
         }
+        // Downloads must finish and import even when an occluded window skips `ui`.
+        if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            downloader::tick(self, ctx);
+            panels::audio_cleanup::tick(self);
+        }))
+        .is_err()
+        {
+            self.ui_error = Some(crash::take_last().unwrap_or_else(|| "unknown error".into()));
+        }
         let had_synthetic = !self.synthetic.is_empty();
         self.drain_control(ctx);
         if !self.synthetic.is_empty() && !had_synthetic {
@@ -2200,7 +2223,13 @@ impl eframe::App for FilmcraftApp {
         self.frames.pump(std::time::Duration::from_millis(if self.playback.playing { 24 } else { 40 }));
         // A panic in one panel must not close the app (losing unsaved work) or leave a blank
         // window: catch it, keep the session, and say what happened.
-        if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| self.frame(ui))).is_err() {
+        if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            self.frame(ui);
+            jarvis::tick(self, ui.ctx());
+            inserts::tick(self, ui.ctx());
+        }))
+        .is_err()
+        {
             self.ui_error = Some(crash::take_last().unwrap_or_else(|| "unknown error".into()));
             self.playback.playing = false;
         }

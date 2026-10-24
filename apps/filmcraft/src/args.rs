@@ -119,7 +119,7 @@ pub fn parse(env_control_port: Option<String>, args: impl IntoIterator<Item = Os
     Ok(Cli::Run(l))
 }
 
-/// Whether a launch file is a FilmCraft project. The extension's case does not matter: Windows file
+/// Whether a launch file is a Smotri project. The extension's case does not matter: Windows file
 /// associations and the Linux MIME glob start the app for `CUT.FCPROJ` too (#850).
 pub fn is_project(path: &str) -> bool {
     Path::new(path).extension().is_some_and(|e| e.eq_ignore_ascii_case("fcproj"))

@@ -1,0 +1,10 @@
+title = "Smotri source checks"
+[extend]
+useDefault = true
+[allowlist]
+description = "Synthetic control token and keyboard shortcut test; no service credentials"
+regexTarget = "line"
+regexes = [
+  '''let token = "0123456789abcdef"\.repeat\(4\);''',
+  '''d\.ok\("ui\.key", json!\(\{"key": "Shift\+ArrowLeft"\}\)\);''',
+]

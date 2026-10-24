@@ -328,7 +328,7 @@ mod tests {
 
     #[test]
     fn latin_and_numbers_inside_rtl_keep_their_order() {
-        assert_eq!(visual("قال FilmCraft 0.6 جيد"), [["جيد", " ", "FilmCraft 0.6", " ", "قال"]]);
+        assert_eq!(visual("قال Smotri 0.6 جيد"), [["جيد", " ", "Smotri 0.6", " ", "قال"]]);
         // Arabic-Indic digits read left to right, one section each so the shaper keeps them so
         assert_eq!(visual("سنة ١٤٤٥"), [["١", "٤", "٤", "٥", " ", "سنة"]]);
     }

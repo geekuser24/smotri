@@ -6,7 +6,7 @@ use std::sync::mpsc::{Receiver, channel};
 use filmcraft_ui_egui::FilmcraftApp;
 use filmcraft_ui_egui::menus::{MENUS, MenuItem as Item, NATIVE_APP_MENU, menu_items};
 use muda::accelerator::Accelerator;
-use muda::{Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu};
+use muda::{CheckMenuItem, Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu};
 
 fn accel(s: &str) -> Option<Accelerator> {
     // Only shortcuts with a modifier become native key equivalents (single keys stay in-app so
@@ -35,11 +35,12 @@ pub fn install(app: &FilmcraftApp, ctx: egui::Context) -> (Receiver<String>, Men
     let items = menu_items(app);
     // each native item with the menu entry it currently shows, so updates touch only what changed
     let mut native: Vec<(Item, MenuItem)> = Vec::new();
+    let mut checks: Vec<(Item, CheckMenuItem)> = Vec::new();
     let mut titles: Vec<(String, Submenu)> = Vec::new();
     let bar = Menu::new();
-    let app_menu = Submenu::new("FilmCraft", true);
+    let app_menu = Submenu::new("Smotri", true);
     let [settings_label, hide_label, hide_others_label, quit_label] = NATIVE_APP_MENU;
-    // FilmCraft ▸ Settings ▸ <category> (Premiere's app-menu layout; General is Cmd+,)
+    // Smotri ▸ Settings ▸ <category> (Premiere's app-menu layout; General is Cmd+,)
     let settings = Submenu::new(app.ui.language.tr(settings_label), true);
     titles.push((settings_label.into(), settings.clone()));
     for it in items.iter().filter(|i| i.id.starts_with("app.settings.")) {
@@ -50,8 +51,8 @@ pub fn install(app: &FilmcraftApp, ctx: egui::Context) -> (Receiver<String>, Men
     }
     // About and Discord repeat Help menu commands: same translated labels, updated with them
     let label = |id: &str, english: &str| items.iter().find(|i| i.id == id).map_or_else(|| english.to_string(), |i| i.label.clone());
-    let about = MenuItem::with_id("app.about", label("app.about", "About FilmCraft"), true, None);
-    let discord = MenuItem::with_id("help.discord", label("help.discord", "Join the ArtCraft Discord…"), true, None);
+    let about = MenuItem::with_id("app.about", label("app.about", "About Smotri"), true, None);
+    let discord = MenuItem::with_id("help.discord", label("help.discord", "Telegram — AKT.MP4"), true, None);
     for (id, mi) in [("app.about", &about), ("help.discord", &discord)] {
         if let Some(it) = items.iter().find(|i| i.id == id) {
             // recorded as built (enabled, no shortcut), so the first update applies the real state
@@ -89,7 +90,7 @@ pub fn install(app: &FilmcraftApp, ctx: egui::Context) -> (Receiver<String>, Men
         let mut subs: Vec<(Vec<String>, Submenu)> = Vec::new();
         for it in mine {
             let mi = MenuItem::with_id(it.id.clone(), &it.label, it.enabled, it.shortcut.as_deref().and_then(accel));
-            native.push(((*it).clone(), mi.clone()));
+
             let mut parent = sub.clone();
             for depth in 1..it.path.len() {
                 let key = it.path[..=depth].to_vec();
@@ -104,7 +105,14 @@ pub fn install(app: &FilmcraftApp, ctx: egui::Context) -> (Receiver<String>, Men
                     }
                 };
             }
-            let _ = parent.append(&mi);
+            if it.id.starts_with("window.panel.") {
+                let check = CheckMenuItem::with_id(it.id.clone(), &it.label, it.enabled, it.checked == Some(true), it.shortcut.as_deref().and_then(accel));
+                let _ = parent.append(&check);
+                checks.push(((*it).clone(), check));
+            } else {
+                let _ = parent.append(&mi);
+                native.push(((*it).clone(), mi));
+            }
         }
         let _ = bar.append(&sub);
     }
@@ -160,6 +168,15 @@ pub fn install(app: &FilmcraftApp, ctx: egui::Context) -> (Receiver<String>, Men
             item.set_text(language.tr(label));
         }
         quit.set_text(language.tr(quit_label));
+        for (shown, mi) in &mut checks {
+            let Some(it) = items.iter().find(|i| i.id == shown.id) else { continue };
+            mi.set_text(&it.label);
+            mi.set_enabled(it.enabled);
+            // Native check items toggle on click; always reconcile with actual dock state.
+            mi.set_checked(it.checked == Some(true));
+            let _ = mi.set_accelerator(it.shortcut.as_deref().and_then(accel));
+            *shown = it.clone();
+        }
         for (shown, mi) in &mut native {
             let Some(it) = items.iter().find(|i| i.id == shown.id) else { continue };
             if it.label != shown.label {

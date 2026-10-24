@@ -9,6 +9,17 @@ use filmcraft_platform::hardware_encode::{hevc_available, hevc_probed, warm_hevc
 
 #[test]
 fn register_answers_the_hevc_probe_in_the_background() {
+    // Other modules in this integration-test binary initialize the same global probe.
+    // A fresh process proves the cold-start contract without racing their encoder tests.
+    if std::env::var_os("SMOTRI_HEVC_PROBE_CHILD").is_none() {
+        let output = std::process::Command::new(std::env::current_exe().expect("test executable"))
+            .args(["--exact", "hevc_probe::register_answers_the_hevc_probe_in_the_background", "--nocapture"])
+            .env("SMOTRI_HEVC_PROBE_CHILD", "1")
+            .output()
+            .expect("isolated probe test");
+        assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+        return;
+    }
     assert!(!hevc_probed(), "nothing has asked yet");
 
     filmcraft_platform::register();

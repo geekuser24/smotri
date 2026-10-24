@@ -5,23 +5,23 @@
   <id>ai.storyteller.filmcraft</id>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>MIT OR Apache-2.0</project_license>
-  <name>FilmCraft</name>
+  <name>Smotri</name>
   <summary>Edit video, color and sound</summary>
   <developer id="ai.storyteller">
-    <name>Learning Machines LLC</name>
+    <name>AKT.MP4</name>
   </developer>
   <description>
     <p>
-      FilmCraft is a video editor. Edit video, color and sound
+      Smotri is a video editor. Edit video, color and sound
     </p>
   </description>
   <launchable type="desktop-id">ai.storyteller.filmcraft.desktop</launchable>
   <icon type="stock">ai.storyteller.filmcraft</icon>
   <!-- Only url types known to appstream 0.15 (Ubuntu 22.04, where CI validates): no vcs-browser. -->
-  <url type="homepage">https://getartcraft.com/apps/filmcraft</url>
-  <url type="bugtracker">https://github.com/storytold/filmcraft/issues</url>
-  <url type="help">https://github.com/storytold/filmcraft</url>
-  <url type="contact">https://discord.gg/artcraft</url>
+  <url type="homepage">https://smotri.cc</url>
+  <url type="bugtracker">https://github.com/geekuser24/smotri/issues</url>
+  <url type="help">https://github.com/geekuser24/smotri</url>
+  <url type="contact">https://t.me/aktmp4</url>
   <categories>
     <category>AudioVideo</category>
     <category>Video</category>

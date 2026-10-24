@@ -112,7 +112,7 @@ class InstallTests(unittest.TestCase):
         binaries.mkdir(parents=True)
         for name in ("filmcraft", "filmcraft-cli"):
             binary = binaries / name
-            binary.write_text("#!/bin/sh\necho 'FilmCraft fixture'\n")
+            binary.write_text("#!/bin/sh\necho 'Smotri fixture'\n")
             binary.chmod(0o755)
         dist = self.root / "dist"
         result = subprocess.run(

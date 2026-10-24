@@ -2065,6 +2065,7 @@ pub(crate) const CLIP_MENU: &[&[(&str, &str)]] = &[
         ("Ripple Delete", "edit.rippleDelete"),
     ],
     &[("Edit Original", "edit.editOriginal"), ("Replace With Clip From Source Monitor", "clip.replaceFromSource")],
+    &[("Remove Silence…", "audioCleanup.openSilence"), ("Remove Duplicate Takes…", "audioCleanup.openDuplicates")],
     &[
         ("Enable", "clip.enable"),
         ("Link", "clip.link"),
@@ -2405,6 +2406,8 @@ fn interact(app: &mut FilmcraftApp, ui: &mut egui::Ui, seq: &Sequence, layout: &
             ui.painter().line_segment([pos2(x, row.rect.min.y), pos2(x, row.rect.max.y)], Stroke::new(1.0, Color32::WHITE));
         }
     }
+
+    super::tools::cursor_badge(ui, area, tool);
 
     // ---- press: act on what was under the pointer when the button went down (#259)
     if !app.tl.cancelled && (resp.drag_started() || (resp.clicked() && app.tl.drag.is_none())) {
@@ -2984,7 +2987,7 @@ fn interact(app: &mut FilmcraftApp, ui: &mut egui::Ui, seq: &Sequence, layout: &
                         "clip.link" if linked => tl!("Unlink"),
                         _ => crate::i18n::t(label),
                     };
-                    let r = ui.add_enabled(!sel.is_empty() && app.session.is_enabled(cmd), egui::Button::new(label));
+                    let r = ui.add_enabled(!sel.is_empty() && (cmd.starts_with("audioCleanup.open") || app.session.is_enabled(cmd)), egui::Button::new(label));
                     app.auto.add(&format!("timeline.clipMenu.{cmd}"), r.rect, label);
                     if r.clicked() {
                         match crate::menus::invoke(app, &ctx, cmd, json!({})) {

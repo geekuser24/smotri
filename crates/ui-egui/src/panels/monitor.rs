@@ -322,6 +322,10 @@ pub fn show(app: &mut FilmcraftApp, ui: &mut egui::Ui, rect: Rect, which: Which)
     }
 
     // ---- controls row: timecode | zoom | res | wrench | duration
+    if which == Which::Program {
+        super::tools::cursor_badge(ui, video_area, app.ui.tool);
+    }
+
     let row1 = Rect::from_min_size(pos2(rect.min.x + 14.0, rect.max.y - controls_h + 2.0), vec2(rect.width() - 28.0, 26.0));
     let tc = format_time(time, rate, drop_frame, TimeDisplay::Timecode, 48000);
     let tc_rect = Rect::from_min_size(row1.min, vec2(110.0, row1.height()));
@@ -341,18 +345,19 @@ pub fn show(app: &mut FilmcraftApp, ui: &mut egui::Ui, rect: Rect, which: Which)
     ui.painter().text(pos2(row1.max.x, row1.center().y), Align2::RIGHT_CENTER, &dur_tc, Tokens::timecode(), t.text_dim);
     // At compact widths, timecodes and view settings need separate rows.
     let settings_y = row1.min.y + if stacked_controls { 26.0 } else { 0.0 };
-    let zoom_x = if stacked_controls && which == Which::Source && !separate_source_drag {
-        row1.min.x
-    } else if stacked_controls {
-        row1.center().x - 83.0
-    } else {
-        row1.min.x + 116.0
-    };
-    let zr = Rect::from_min_size(pos2(zoom_x, settings_y), vec2(70.0, 24.0));
     let zoom_label = match mv.zoom {
         None => tl!("Fit").to_string(),
         Some(z) => format!("{}%", (z * 100.0).round() as i32),
     };
+    let zoom_width = (ui.painter().layout_no_wrap(zoom_label.clone(), Tokens::ui(12.0), t.text).size().x + 32.0).max(70.0);
+    let zoom_x = if stacked_controls && which == Which::Source && !separate_source_drag {
+        row1.min.x
+    } else if stacked_controls {
+        row1.center().x - (zoom_width + 96.0) / 2.0
+    } else {
+        row1.min.x + 116.0
+    };
+    let zr = Rect::from_min_size(pos2(zoom_x, settings_y), vec2(zoom_width, 24.0));
     let zresp = crate::widgets::dropdown_text(ui, zr, &zoom_label, &t, egui::Id::new((prefix, "zoom")));
     app.auto.add(&format!("{prefix}.zoom"), zr, "Select Zoom Level");
     monitor_view::zoom_menu(app, &zresp, which);
