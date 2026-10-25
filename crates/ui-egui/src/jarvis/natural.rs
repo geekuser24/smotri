@@ -90,6 +90,7 @@ fn effect_name(s: &str) -> Option<&'static str> {
         "черно белый" | "черно белый эффект" | "чб" | "black and white" | "black white" | "обесцвечивание" => {
             return Some("black_white");
         }
+        "шейкер" | "шэйкер" | "shaker" | "camera shake" => return Some("shaker"),
         "яркость" | "brightness" => return Some("brightness_contrast"),
         _ => {}
     }
@@ -139,7 +140,9 @@ fn effect_action(s: &str) -> Option<Intent> {
     }
     let preset = match phrase {
         "hit shake" | "ударный шейк" | "короткий шейк" | "короткий удар" | "short shake" => Some("hit"),
-        "шейк как в edt" | "шейк edt" | "edt shake" | "шейк со вспышкой" => Some("edt"),
+        "шейк как в edit" | "шейк edit" | "edit shake" | "эдит шейк" | "шейк как в эдит" | "шейк как в edt" | "шейк edt" | "edt shake" | "шейк со вспышкой" => {
+            Some("edit")
+        }
         "тряску камеры" | "живую тряску" | "тряску с рук" | "handheld shake" | "camera shake" => Some("handheld"),
         _ => None,
     };
@@ -506,10 +509,15 @@ mod tests {
             ("расшифруй таймлайн", "voice.transcribe", json!({"scope":"timeline","mode":"all"})),
             ("удали паузы в голосе в клипе", "voice.removePauses", json!({"scope":"clip","mode":"voice"})),
             ("удали паузы учитывая все слои", "voice.removePauses", json!({"scope":"timeline","mode":"all"})),
-            ("установи параметр frequency на 2 в эффекте camera shake", "voice.parameter", json!({"effect":"camera_shake","param":"frequency","value":2.0})),
+            ("установи параметр frequency на 2 в эффекте camera shake", "voice.parameter", json!({"effect":"shaker","param":"frequency","value":2.0})),
             ("добавь шейк", "jarvis.askShake", json!({})),
             ("добавь тряску камеры", "voice.shake", json!({"preset":"handheld"})),
-            ("сделай шейк как в edt", "voice.shake", json!({"preset":"edt"})),
+            ("сделай шейк как в edit", "voice.shake", json!({"preset":"edit"})),
+            ("добавь эдит шейк", "voice.shake", json!({"preset":"edit"})),
+            ("поставь ключ удара", "voice.shakerHit", json!({})),
+            ("add shaker hit", "voice.shakerHit", json!({})),
+            ("пресет шейкера эдит", "voice.parameter", json!({"effect":"shaker","param":"preset","value":1})),
+            ("shaker hit mode off", "voice.parameter", json!({"effect":"shaker","param":"hit_mode","value":false})),
             ("накинь черно белый эффект на второй клип на видео 2", "voice.effect", json!({"effect":"black_white","target":{"ordinal":2,"track":2}})),
         ] {
             assert_eq!(super::super::parse(phrase), Some(Intent::new(id, p)), "{phrase}");

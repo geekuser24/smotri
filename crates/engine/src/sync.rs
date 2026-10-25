@@ -122,18 +122,48 @@ pub fn timeline_clip(p: &Project, ti: &TrackItem) -> SyncClip {
     }
 }
 
-/// Mono audio of a clip's media range at [`ANALYSIS_RATE`] (None: no audio).
-pub fn clip_audio(s: &Session, c: &SyncClip) -> Option<Vec<f32>> {
-    let src = s.source(c.item)?;
-    if !src.info().has_audio() {
-        return None;
+/// Analysis channel: zero mixes all source channels; positive values are 1-based.
+pub fn channel_param(p: &Value) -> Result<usize> {
+    match p.get("channel") {
+        None => Ok(0),
+        Some(v) => v.as_u64().filter(|v| *v <= 32).map(|v| v as usize).ok_or_else(|| EngineError::Other("Audio channel must be 0 (mix) or 1–32".into())),
     }
-    let sr = ANALYSIS_RATE as i64;
+}
+
+/// Read bounded chunks so multichannel recordings do not allocate their full duration at once.
+pub fn clip_audio(s: &Session, c: &SyncClip, channel: usize) -> Result<Vec<f32>> {
+    let fail = |reason: &str| EngineError::Other(format!("{}: {reason}", c.name));
+    let src = s.source(c.item).ok_or_else(|| fail("media unavailable"))?;
+    if !src.info().has_audio() {
+        return Err(fail("no audio to synchronize by"));
+    }
+    if channel > 32 || c.range.start < Tick::ZERO || c.range.duration <= Tick::ZERO {
+        return Err(fail("invalid analysis channel or source range"));
+    }
+    let sr = i64::from(ANALYSIS_RATE);
     let start = c.range.start.to_units_floor(sr);
     let len = c.range.duration.min(MAX_ANALYSIS).to_units_floor(sr).max(0) as usize;
-    let buf = src.audio(start, len, ANALYSIS_RATE).ok()?;
-    let chans: Vec<&[f32]> = buf.channels.iter().map(|c| c.as_slice()).collect();
-    Some(mixdown(&chans))
+    let mut mono = Vec::new();
+    mono.try_reserve_exact(len).map_err(|_| fail("not enough memory for audio analysis"))?;
+    for offset in (0..len).step_by(48_000) {
+        let count = (len - offset).min(48_000);
+        let at = start.checked_add(offset as i64).ok_or_else(|| fail("source time overflow"))?;
+        let buf = src.audio(at, count, ANALYSIS_RATE).map_err(|e| fail(&format!("audio decode failed: {e}")))?;
+        if buf.channels.is_empty() || buf.channels.len() > 32 || buf.channels.iter().any(|c| c.len() != count) {
+            return Err(fail("invalid decoded audio channels"));
+        }
+        let samples = if channel == 0 {
+            let channels: Vec<&[f32]> = buf.channels.iter().map(Vec::as_slice).collect();
+            mixdown(&channels)
+        } else {
+            buf.channels.get(channel - 1).ok_or_else(|| fail("selected audio channel is missing"))?.clone()
+        };
+        if samples.iter().any(|v| !v.is_finite()) {
+            return Err(fail("non-finite audio samples"));
+        }
+        mono.extend(samples);
+    }
+    Ok(mono)
 }
 
 /// The outcome for one clip: its anchor, and for audio the correlation figures.
@@ -145,17 +175,17 @@ pub struct Anchor {
 
 /// Compute the anchors of `clips` (index `reference` is the reference for audio and `offset`).
 /// `offset` (ticks) moves every other clip later by that much.
-pub fn anchors(s: &Session, clips: &[SyncClip], reference: usize, method: &Method, offset: Tick) -> Result<Vec<Anchor>> {
+pub fn anchors(s: &Session, clips: &[SyncClip], reference: usize, method: &Method, offset: Tick, channel: usize) -> Result<Vec<Anchor>> {
     if clips.is_empty() {
         return Err(EngineError::Other("nothing to synchronize".into()));
     }
+    let reference_clip = clips.get(reference).ok_or_else(|| EngineError::Other("Invalid reference clip".into()))?;
+    if clips.len() > 128 {
+        return Err(EngineError::Other("Select at most 128 sources".into()));
+    }
     let hour = Tick(3600 * TICKS_PER_SECOND);
     let mut out: Vec<Anchor> = Vec::with_capacity(clips.len());
-    let ref_audio = if *method == Method::Audio {
-        Some(clip_audio(s, &clips[reference]).ok_or_else(|| EngineError::Other(format!("{} has no audio to synchronize by", clips[reference].name)))?)
-    } else {
-        None
-    };
+    let ref_audio = if *method == Method::Audio { Some(clip_audio(s, reference_clip, channel)?) } else { None };
     for (i, c) in clips.iter().enumerate() {
         let a = match method {
             Method::In => Anchor { anchor: c.in_point, audio: None },
@@ -176,9 +206,12 @@ pub fn anchors(s: &Session, clips: &[SyncClip], reference: usize, method: &Metho
                     Anchor { anchor: c.range.start, audio: None }
                 } else {
                     let a = ref_audio.as_deref().unwrap_or_default();
-                    let b = clip_audio(s, c).ok_or_else(|| EngineError::Other(format!("{} has no audio to synchronize by", c.name)))?;
+                    let b = clip_audio(s, c, channel)?;
                     let r = find_offset(a, &b, ANALYSIS_RATE, &SyncOptions::default())
-                        .ok_or_else(|| EngineError::Other(format!("{} and {} have no common audio", clips[reference].name, c.name)))?;
+                        .ok_or_else(|| EngineError::Other(format!("{} and {} have no common audio", reference_clip.name, c.name)))?;
+                    if !r.reliable() {
+                        return Err(EngineError::Other(format!("{}: audio match is ambiguous; choose another channel or reference clip", c.name)));
+                    }
                     // b[n] (media r0_i + n) lines up with a[n + L] (media r0_ref + n + L); with the
                     // reference anchored at r0_ref, equal common times give anchor_i = r0_i − L
                     let lag = Tick::from_units(r.lag, ANALYSIS_RATE as i64);
@@ -226,4 +259,22 @@ pub fn report(clips: &[SyncClip], anchors: &[Anchor], starts: &[Tick], rate: Fra
             })
             .collect(),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn hostile_reference_index_returns_error_without_panicking() {
+        let clip = SyncClip {
+            item: ItemId(1),
+            name: "recording".into(),
+            range: TimeRange::new(Tick::ZERO, Tick(TICKS_PER_SECOND)),
+            in_point: Tick::ZERO,
+            out_point: Tick(TICKS_PER_SECOND),
+            timecode: Tick::ZERO,
+            markers: vec![],
+        };
+        assert!(anchors(&Session::default(), &[clip], usize::MAX, &Method::Audio, Tick::ZERO, 0).is_err());
+    }
 }

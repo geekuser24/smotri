@@ -6,7 +6,7 @@ The header button only toggles voice mode; it has no settings popup. If no key i
 it displays a hint directing you to Settings.
 The existing Discord Help menu link remains available.
 
-On macOS the ElevenLabs API key is stored in Keychain under `FilmCraft.Jarvis.ElevenLabs`,
+On macOS the ElevenLabs API key is stored in Keychain under `Smotri.Jarvis.ElevenLabs` (with automatic fallback to the old FilmCraft entry),
 account `api-key`. Enter a replacement in Settings → Jarvis and click OK to save it;
 Cancel discards the draft. The page shows whether a key is already configured without
 revealing it. On other desktop platforms it is session-only; `ELEVENLABS_API_KEY` is
@@ -135,10 +135,10 @@ The slot grammar also supports these RU / EN examples (each preceded by Jarvis):
 - «сдвинь таймлайн влево на 10 кадров» / “move playhead left by 10 frames”. This moves the playhead.
 - «добавь черно белый эффект» / “add black and white”. Effect registry names and available Russian
   translations also work. Selection is preferred; with none selected, the clip at the playhead is used.
-- «добавь ударный шейк» / “add hit shake”: a 600 ms decaying hit at the playhead. «сделай шейк как в EDT» /
-  “add EDT shake” adds brief brightness flicker and turbulent displacement. «добавь тряску камеры» /
+- «добавь ударный шейк» / “add hit shake”: a 280 ms decaying hit at the playhead. «сделай шейк как в EDIT» /
+  “add EDIT shake” adds brief brightness flicker and ripple. «добавь тряску камеры» /
   “add handheld shake” applies layered smooth noise for the whole clip. A seed is stored per application.
-- «уменьши scale на 20 процентов» / “decrease scale by 20 percent”: multiply the existing scale by .8.
+- «уменьши scale на 20 процентов» / “decrease scale by 20 percent”: subtract 20 percentage points from the existing scale.
   «понизь яркость на 20 процентов» reduces brightness by 20 points; opacity also uses points.
 - «смени метод наложения на screen» / “set blend mode to screen”.
 - «выбери эффект camera shake» / “select effect camera shake”.
@@ -180,7 +180,7 @@ syllable was recognized. Listen to the result and use «отменить» / “
 
 «Джарвис, добавь шейк» / “Jarvis, add shake” (also «добавь здесь тряску») asks which preset:
 1. Hit shake / ударный.
-2. EDT with flash / EDT со вспышкой.
+2. EDIT with flash / EDIT со вспышкой.
 3. Handheld / живая камера с рук.
 
 The question appears in the status line and is synthesized with the same ElevenLabs key using
@@ -206,7 +206,7 @@ zero-based; spoken numbers start at one). Inspection exposes `speaking` and `awa
 real Scribe transcripts of synthetic RU/EN speech. Release build, scoped Clippy
 with warnings denied, formatting and diff checks passed. Full workspace CI was not run.
 The installed macOS build was exercised on an isolated demo project: spoken clarification,
-listener restart, EDT choice and Undo, effect/blend/scale edits and Undo. A real batch
+listener restart, EDIT choice and Undo, effect/blend/scale edits and Undo. A real batch
 Scribe request archived/imported a transcript and removed a synthetic silent gap
 (131 frames became 88), with boundary gain fades. The question and Settings UI were
 visually inspected. Spoken answers are parser-tested; the user's own microphone
@@ -331,7 +331,7 @@ video clip's end (or the clip under the playhead), with a five-second fallback.
 Placement reuses an unlocked, enabled empty span above all overlapping video clips
 or creates a new upper video track. Existing clips and audio are not overwritten.
 
-Hit/EDT presets now default to a short adjustment overlay (about 280 ms, snapped to
+Hit/EDIT presets now default to a short adjustment overlay (about 280 ms, snapped to
 sequence frames and bounded by the target clip). Their envelope settles in 260 ms.
 “На сам клип” / “directly on clip” applies the accent to the clip instead. Handheld
 remains a full-clip effect; “корректирующим слоем” / “as adjustment layer” instead
@@ -403,3 +403,36 @@ UI commands: `audioCleanup.openSilence`, `audioCleanup.openDuplicates`. Both ope
 The six engine regression tests cover waveform margins/quiet speech, duplicate grouping, local
 analysis without a transcriber, linked A/V, untouched unrelated tracks, remapped review times,
 Undo and invalid inputs. Live API and UI validation is recorded separately in local QA logs.
+
+## SoundPad and docked workflow commands
+
+See [SoundPad](soundpad.md) for the new Russian/English search, numbered preview/import and workflow phrases. Voice previews never import automatically. Stop is accepted during SoundPad playback; other voice editing is held until playback and its echo tail end. Vertical-video analysis, selection, creation and batch export use the same commands and current panel options as manual controls. Duplicate take choices specify both take and group numbers. Search, preview and file-picker steps are separate commands; asynchronous workflows are not combined into an editing command chain.
+
+
+## Shaker and manual Beat Edit
+
+Effects → Video Effects → Transform → **Shaker** applies the same effect used by
+Jarvis shake commands and Beat Edit accents. Presets are **Hit**, **EDIT Flash**,
+and **Handheld**. Amount, rotation, zoom, frequency, complexity, motion blur,
+flash/flicker, ripple and random seed remain editable. Mirror Edges avoids exposed
+black borders. Changing a preset resets its tuning values/curves, while preserving
+Hit Mode, Hit Trigger keys, strength, seed and edge mode.
+
+Without **Hit Mode**, motion continues across the clip. With Hit Mode on, enable
+animation for **Hit Trigger** using the stopwatch, then add a diamond key at each
+wanted hit. Each key starts an independent decaying shake (280 ms by default);
+its value controls that hit's strength. No trigger keys means no shake. Duration
+uses effect/media time, so retiming the clip also retimes the hits. Rendering is
+deterministic in preview and export. Old Camera Shake effects remain supported.
+
+«Джарвис, поставь ключ удара» / “Jarvis, add shaker hit” enables Hit Mode and adds
+one trigger key to the selected clip's Shaker at the playhead. «Включи хит режим» /
+“shaker hit mode on”, «пресет шейкера эдит» / “shaker preset edit” change its settings.
+«Добавь эдит шейк» creates a short Shaker adjustment layer; «добавь тряску с рук»
+uses continuous Shaker on the target clip. Legacy EDT recognition is retained for
+older commands; the displayed preset name is EDIT.
+
+Timeline clip right-click → **Эдит / Beat Edit**, below the silence and duplicate
+commands, invokes the same `voice.autoEdit` command as Jarvis. Select video clips
+and music/audio first. It creates a separate beat-cut sequence, preserves originals,
+and can be undone in one step; missing selection inputs produce an actionable error.

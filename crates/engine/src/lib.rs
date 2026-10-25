@@ -19,6 +19,7 @@ pub mod color;
 pub mod commands;
 pub mod demo;
 pub mod doc_path;
+mod easing;
 pub mod essential_sound;
 pub mod export_tools;
 pub mod graphic_templates;
@@ -52,6 +53,7 @@ pub mod sequence_tools;
 pub mod settings;
 pub mod shortcut_presets;
 pub mod shortcuts;
+pub mod shorts;
 pub mod source_monitor;
 pub mod sync;
 pub mod transcript;
@@ -479,6 +481,8 @@ pub struct Session {
     pub voice_auto_edits: Vec<voice_auto_edit::Pending>,
     pub voice_transcripts: Vec<voice_transcript::Pending>,
     pub audio_cleanup: Option<audio_cleanup::Review>,
+    pub shorts: Option<shorts::Review>,
+    pub shorts_analyst: Option<Arc<dyn shorts::Analyst>>,
     /// Effect presets (built-in + the user's, persisted in the data directory).
     pub presets: presets::PresetLibrary,
     /// Export presets (built-in + the user's, persisted in the data directory) and favourites.
@@ -586,6 +590,8 @@ impl Session {
             voice_auto_edits: Vec::new(),
             voice_transcripts: Vec::new(),
             audio_cleanup: None,
+            shorts: None,
+            shorts_analyst: None,
             presets: Default::default(),
             export_presets: Default::default(),
             export_queue: Default::default(),

@@ -573,7 +573,7 @@ fn escape_cancels_a_group_preview_without_editing_the_project() {
 #[test]
 fn effect_and_mask_keyframes_move_together_without_crossing_parameters() {
     let (mut d, clip) = Driver::demo();
-    d.click("effectControls.effect.motion");
+    d.click("effectControls.effect.motion.twirl");
     d.exec("masks.add", json!({"clip":clip.id,"effect":"opacity","shape":"ellipse"}));
     let mut keys = Vec::new();
     for (mask, seconds) in [(None, 1.0), (Some(0), 1.5)] {
@@ -726,4 +726,41 @@ fn a_line_separates_added_effects_from_the_fixed_ones() {
         "on the edge between the fixed and the added effects: {opacity:?} {line:?} {blur:?}"
     );
     assert!(tint[1] > blur[1], "one line, above all the added effects");
+}
+
+#[test]
+fn graphs_panel_apply_drag_save_and_context_menu() {
+    let (mut d, clip) = Driver::demo();
+    for seconds in [0.5, 1.5] {
+        d.seek(seconds);
+        d.exec("effects.addKeyframe", json!({"clip":clip.id,"effect":"motion","param":"scale"}));
+    }
+    let s = &d.harness.state().session;
+    let it = s.active_sequence().unwrap().find_item(ClipId(clip.id)).unwrap().1;
+    let effect = it.effects.iter().position(|e| e.effect == "motion").unwrap();
+    let keys =
+        it.effects[effect].params["scale"].keyframes.iter().map(|k| json!({"clip":clip.id,"effect":effect,"param":"scale","time":k.time})).collect::<Vec<_>>();
+    d.ok("ui.set", json!({"keyframeSelection":keys}));
+    let key_id = format!("effectControls.motion.scale.keyframe.{}", keys[0]["time"]);
+    d.rect(&key_id);
+    d.ok("ui.click", json!({"id":key_id,"button":"right"}));
+    d.frames(3);
+    d.click("effectControls.keyframeMenu.graphs");
+    d.rect("graphs.apply");
+    assert_eq!(d.exec("graphs.inspect", json!({}))["selection"].as_array().unwrap().len(), 2);
+    d.exec("graphs.set", json!({"preset":"Back Out"}));
+    d.shot("graphs-before-apply");
+    d.click("graphs.apply");
+    let inspect = d.exec("graphs.inspect", json!({}));
+    let it = d.harness.state().session.active_sequence().unwrap().find_item(ClipId(clip.id)).unwrap().1;
+    assert!(it.effects[effect].params["scale"].keyframes[0].easing.is_some(), "{inspect}");
+    let before = d.exec("graphs.inspect", json!({}))["draft"]["curve"].clone();
+    let [x, y, w, h] = d.rect("graphs.handle.0");
+    let from = egui::pos2((x + w / 2.0) as f32, (y + h / 2.0) as f32);
+    d.gesture(from, from + egui::vec2(18.0, 10.0), egui::Modifiers::NONE, None);
+    assert_ne!(d.exec("graphs.inspect", json!({}))["draft"]["curve"], before);
+    d.exec("graphs.set", json!({"curve":[0.25,0.0,0.75,1.0],"name":"My UI Curve"}));
+    d.click("graphs.save");
+    assert_eq!(d.harness.state().session.prefs.easing_presets[0].name, "My UI Curve");
+    d.shot("graphs-panel");
 }

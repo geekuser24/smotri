@@ -14,14 +14,7 @@ impl Transcriber for Scribe {
         if !progress(0.05, "Scribe v2: uploading audio") {
             return Err(SpeechError::Cancelled);
         }
-        #[cfg(target_os = "macos")]
-        let key = security_framework::passwords::get_generic_password("Smotri.Jarvis.ElevenLabs", "api-key").ok().and_then(|v| String::from_utf8(v).ok());
-        #[cfg(not(target_os = "macos"))]
-        let key: Option<String> = None;
-        let key = key
-            .or_else(|| std::env::var("ELEVENLABS_API_KEY").ok())
-            .filter(|k| !k.is_empty())
-            .ok_or_else(|| fail("Configure the ElevenLabs key in Settings > Jarvis"))?;
+        let key = crate::credentials::load(false).ok_or_else(|| fail("Configure the shared ElevenLabs key in Settings"))?;
         let boundary = "SmotriScribeAudioBoundary2026";
         let mut body = Vec::new();
         for (k, v) in [("model_id", "scribe_v2"), ("timestamps_granularity", "word"), ("tag_audio_events", "false"), ("diarize", "false")] {

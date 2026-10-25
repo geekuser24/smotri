@@ -483,6 +483,8 @@ pub struct UiState {
     /// Effect Controls: the selected keyframes, highlighted in the keyframe lane (a click selects one).
     #[serde(default)]
     pub keyframe_selection: Vec<KeyframeRef>,
+    #[serde(default)]
+    pub graphs: crate::panels::graphs::GraphDraft,
     /// Essential Sound sub-tab: "Edit" or "Browse".
     #[serde(default)]
     pub essential_sound_tab: String,
@@ -671,6 +673,10 @@ pub struct SyncDraft {
     pub offset: i64,
     /// Synchronize: reference track (`V1`, `A2`…; empty = the lowest track).
     pub track: String,
+    /// 0 mixes channels; 1–32 selects one source channel.
+    pub channel: usize,
+    /// Timeline clip ID; zero uses the reference track.
+    pub reference: u64,
     /// Create Multi-Camera: `camera1` | `all` | `switch`.
     pub audio: String,
     /// Create Multi-Camera: `clip` | `track` | `metadata`.
@@ -692,6 +698,8 @@ impl Default for SyncDraft {
             marker: String::new(),
             offset: 0,
             track: String::new(),
+            channel: 0,
+            reference: 0,
             audio: "camera1".into(),
             camera_names: "clip".into(),
             processed_bin: true,
@@ -986,6 +994,7 @@ impl Default for UiState {
             failed_link: None,
             eyedropper: None,
             keyframe_selection: Vec::new(),
+            graphs: Default::default(),
             essential_sound_tab: "Edit".into(),
             tts: Default::default(),
             export: Default::default(),

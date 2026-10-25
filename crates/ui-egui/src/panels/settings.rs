@@ -58,6 +58,8 @@ pub fn open(app: &mut FilmcraftApp, page: &str) -> Result<Value, String> {
     let cat = settings::category(page).ok_or_else(|| format!("unknown settings category `{page}`"))?;
     app.jarvis.clear_key_draft();
     app.inserts.clear_key_draft();
+    app.soundpad.key.clear();
+    app.shorts.key.clear();
     app.ui.settings = Some(SettingsDraft { page: cat.id.into(), values: app.session.prefs.to_value(), ..Default::default() });
     app.dialog = Some(Dialog::Preferences);
     Ok(json!({"dialog": "settings", "page": cat.id}))
@@ -898,6 +900,10 @@ pub fn show(app: &mut FilmcraftApp, ctx: &egui::Context) -> bool {
                     ui.spacing_mut().item_spacing.y = 6.0;
                     if cat.id == "jarvis" {
                         crate::jarvis::settings_page(app, ui, &mut d.values);
+                    } else if cat.id == "verticalVideos" {
+                        crate::shorts::settings(app, ui);
+                    } else if cat.id == "soundpad" {
+                        crate::soundpad::settings(app, ui, &mut d.values);
                     } else if cat.id == "inserts" {
                         crate::inserts::settings_page(app, ui, &mut d.values);
                     } else {
@@ -925,6 +931,8 @@ pub fn show(app: &mut FilmcraftApp, ctx: &egui::Context) -> bool {
                 app.jarvis.clear_key_draft();
             } else if reset && d.page == "inserts" {
                 app.inserts.clear_key_draft();
+                app.soundpad.key.clear();
+                app.shorts.key.clear();
             } else if reset {
                 // this category back to its defaults (OK applies it)
                 let defaults = filmcraft_engine::autosave::Preferences::default().to_value();
@@ -945,6 +953,14 @@ pub fn show(app: &mut FilmcraftApp, ctx: &egui::Context) -> bool {
         ui.add_space(14.0);
     });
     if apply && let Err(error) = app.jarvis.apply_key_draft() {
+        d.message = error;
+        apply = false;
+    }
+    if apply && let Err(error) = crate::shorts::apply_key(app) {
+        d.message = error;
+        apply = false;
+    }
+    if apply && let Err(error) = app.soundpad.apply_key() {
         d.message = error;
         apply = false;
     }
@@ -972,6 +988,8 @@ pub fn show(app: &mut FilmcraftApp, ctx: &egui::Context) -> bool {
     } else {
         app.jarvis.clear_key_draft();
         app.inserts.clear_key_draft();
+        app.soundpad.key.clear();
+        app.shorts.key.clear();
     }
     !close
 }

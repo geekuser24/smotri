@@ -11,3 +11,17 @@
 ## Initial fork changes
 
 Smotri eyes logo and branding; AKT.MP4 links; Jarvis voice control and editing commands; GIPHY inserts; Downloader; dockable silence and duplicate removal; bot-based website sign-in and download gates. Premiere preset adaptation is not yet validated.
+
+## Preview publication
+
+`smotri-v*` tags run `.github/workflows/release.yml`. After all six native jobs and
+WASM succeed, a GitHub prerelease receives versioned ZIPs with checksums and
+`BUILD.json` identifying the exact source commit. These preview archives deliberately
+exclude Downloader helpers and say so in the archive, README and release notes.
+They must not be presented as complete installers or silently replace a full local app.
+macOS previews are ad-hoc signed application bundles; Windows uses the static CRT.
+
+The complete downloader package remains a separate gate: the current standalone
+yt-dlp archive's own source tarball does not include all bundled dependencies' sources,
+and video normalization currently uses macOS VideoToolbox. Resolve both before a full
+cross-platform release. Keep existing site catalogs, credentials and download gates intact.

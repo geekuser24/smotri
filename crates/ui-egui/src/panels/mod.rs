@@ -15,6 +15,7 @@ pub mod file_dialogs;
 pub mod frame_export;
 pub mod graphics;
 pub mod graphics_templates;
+pub mod graphs;
 pub mod import_mode;
 pub mod interchange_export;
 pub mod keyboard;
@@ -76,6 +77,7 @@ pub fn eta_suffix(job: &serde_json::Value) -> String {
 
 pub fn show(app: &mut FilmcraftApp, ui: &mut egui::Ui, p: PanelKind, rect: Rect) {
     match p {
+        PanelKind::Graphs => graphs::show(app, ui, rect),
         PanelKind::Program if !app.session.state.edit_points.is_empty() => trim_monitor::show(app, ui, rect),
         PanelKind::Program => monitor::show(app, ui, rect, monitor::Which::Program),
         PanelKind::Source => monitor::show(app, ui, rect, monitor::Which::Source),
@@ -94,9 +96,11 @@ pub fn show(app: &mut FilmcraftApp, ui: &mut egui::Ui, p: PanelKind, rect: Rect)
         PanelKind::Markers => misc::markers(app, ui, rect),
         PanelKind::Info => misc::info(app, ui, rect),
         PanelKind::Inserts => crate::inserts::show(app, ui, rect),
+        PanelKind::SoundPad => crate::soundpad::show(app, ui, rect),
         PanelKind::Downloader => crate::downloader::show(app, ui, rect),
         PanelKind::SilenceRemoval => audio_cleanup::show(app, ui, rect, false),
         PanelKind::DuplicateTakes => audio_cleanup::show(app, ui, rect, true),
+        PanelKind::VerticalVideos => crate::shorts::show(app, ui, rect),
         PanelKind::MediaBrowser => media_browser::show(app, ui, rect),
         PanelKind::AudioTrackMixer => mixer::track_mixer(app, ui, rect),
         PanelKind::AudioClipMixer => mixer::clip_mixer(app, ui, rect),

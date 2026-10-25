@@ -130,6 +130,9 @@ fn the_clip_menu_offers_multi_camera_and_reveal_in_project() {
     d.frames(3);
     assert!(d.has("timeline.clipMenu.clip.multicam"));
     assert!(d.has("timeline.clipMenu.clip.revealInProject"));
+    // Audio cleanup and Beat Edit extend the scrollable menu past this viewport.
+    d.ok("ui.scroll", json!({"id": "timeline.clipMenu.edit.copy", "dy": -700.0}));
+    d.frames(20);
     d.click("timeline.clipMenu.clip.revealInProject");
     assert_eq!(d.app().session.state.project_selection, vec![item]);
 }

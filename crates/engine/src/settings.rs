@@ -1165,7 +1165,13 @@ static CATEGORIES: &[Category] = &[
     },
     // Native credentials are drawn by the UI and are never stored in Preferences.
     Category { id: "jarvis", title: "Jarvis", rows: &[b("jarvis.enabled", "Enable Jarvis", true)] },
-    Category { id: "inserts", title: "Inserts", rows: &[b("inserts.addToTimeline", "Add to timeline after import", true)] },
+    Category { id: "verticalVideos", title: "Vertical Videos", rows: &[] },
+    Category { id: "soundpad", title: "SoundPad", rows: &[b("soundpad.addToTimeline", "Add to timeline after import", true)] },
+    Category {
+        id: "inserts",
+        title: "Inserts",
+        rows: &[b("inserts.addToTimeline", "Add to timeline after import", true), b("clipboard.addToTimeline", "Add clipboard media to timeline", true)],
+    },
     Category {
         id: "downloader",
         title: "Downloader",

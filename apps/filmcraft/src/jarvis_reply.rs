@@ -89,7 +89,7 @@ fn output<T: cpal::SizedSample + cpal::FromSample<f32>>(
         )
         .map_err(|e| format!("Speech output: {e}"))
 }
-fn play(samples: Vec<f32>, cancel: &Arc<AtomicBool>) -> Result<(), String> {
+pub(crate) fn play(samples: Vec<f32>, cancel: &Arc<AtomicBool>) -> Result<(), String> {
     let host = cpal::default_host();
     let device = host.default_output_device().ok_or("No audio output device for Jarvis")?;
     let supported = device.default_output_config().map_err(|_| "Cannot open the audio output device")?;

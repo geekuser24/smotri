@@ -591,6 +591,10 @@ fn media_image(project: &Project, seq: &Sequence, item: &TrackItem, t: Tick, src
 
 /// A track item's picture at timeline `t` before any effect (decoded, colour managed, frame
 /// blended; nested sequences rendered; graphics rasterised), at `want` of its source size.
+pub(crate) fn show_nested_captions(item: &TrackItem) -> bool {
+    item.effect("motion").and_then(|e| e.param("nested_captions")).and_then(|p| p.value.as_bool()).unwrap_or(true)
+}
+
 pub(crate) fn base_layer(
     project: &Project,
     seq: &Sequence,
@@ -623,7 +627,7 @@ pub(crate) fn base_layer(
                 },
                 // A nested sequence shows its captions wherever it is nested, as part of its
                 // picture (Premiere does the same), whether or not the outer sequence shows its own.
-                None => render_seq(project, nested, ft, RenderOptions { captions: true, ..sub }, sources),
+                None => render_seq(project, nested, ft, RenderOptions { captions: show_nested_captions(item), ..sub }, sources),
             }
         }
         ItemKind::AdjustmentLayer { .. } => return None,

@@ -595,14 +595,21 @@ fn eyedropper_picks_a_key_color_on_a_selected_clip() {
     d.frames(4);
     let color = |d: &mut Driver| d.sequence()["video"][0]["items"][0]["effects"][0]["params"]["color"]["value"].clone();
     let before = color(&mut d);
+    // The added effect follows the fixed effects and can be below the panel's viewport.
+    d.ok("ui.scroll", json!({"id": "effectControls.lane", "dy": -400.0}));
+    d.frames(20);
     d.ok("ui.click", json!({"id": "effectControls.color_key.color.eyedropper"}));
     d.frames(2);
+    assert!(d.harness.state().ui.eyedropper.is_some(), "eyedropper is armed");
     d.ok("ui.click", json!({"id": "program.picture"}));
-    for _ in 0..200 {
+    // The background decoder/render worker needs real wall time, not just headless UI frames.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    while std::time::Instant::now() < deadline {
         if color(&mut d) != before {
             break;
         }
         d.frames(1);
+        std::thread::sleep(std::time::Duration::from_millis(2));
     }
     assert_ne!(color(&mut d), before, "the eyedropper filled Key Color from the Program picture");
 }

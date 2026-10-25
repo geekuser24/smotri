@@ -8,6 +8,32 @@ use serde_json::{Value, json};
 use std::sync::OnceLock;
 
 pub(super) const COMMANDS: &[(&str, &[&str])] = &[
+    ("voice.shakerHit", &["поставь ключ удара", "добавь ключ шейкера", "удар шейкера здесь", "add shaker hit", "trigger shaker here"]),
+    ("jarvis.soundNext", &["следующие звуки", "следующая страница звуков", "next sounds", "next sound page"]),
+    ("jarvis.soundPrevious", &["предыдущие звуки", "previous sounds"]),
+    ("jarvis.shortsFolder", &["выбери папку для шортсов", "choose shorts export folder"]),
+    (
+        "window.panel.soundPad",
+        &["открой саундпад", "покажи саундпад", "саундпад", "открой звуковую библиотеку", "soundpad", "open soundpad", "show soundpad", "open sound library"],
+    ),
+    ("window.panel.verticalVideos", &["открой вертикальные видео", "покажи шортсы", "открой шортсы", "open vertical videos", "show shorts", "open shorts"]),
+    ("window.panel.inserts", &["открой вставки", "покажи гифки", "open inserts", "show gifs"]),
+    ("window.panel.downloader", &["открой загрузчик", "покажи загрузчик", "open downloader", "show downloader"]),
+    ("window.panel.silenceRemoval", &["открой удаление тишины", "настрой удаление пауз", "open silence removal"]),
+    ("window.panel.duplicateTakes", &["открой удаление дублей", "покажи дубли", "open duplicate takes"]),
+    ("soundpad.stop", &["останови звук", "останови предпрослушивание", "stop sound", "stop sound preview"]),
+    ("jarvis.shortsAnalyze", &["проанализируй шортсы", "найди короткие фрагменты", "анализ вертикальных видео", "analyze shorts", "find short clips"]),
+    ("jarvis.shortsSelectAll", &["выбери все шортсы", "выдели все фрагменты", "select all shorts"]),
+    ("jarvis.shortsCreate", &["создай выбранные шортсы", "создай шортсы", "create selected shorts", "create shorts"]),
+    ("jarvis.shortsExport", &["экспортируй шортсы", "экспорт выбранных шортсов", "export shorts", "batch export shorts"]),
+    ("jarvis.cleanupSilence", &["проанализируй тишину", "анализ пауз", "найди тишину в выделенном", "analyze silence", "find silent gaps"]),
+    ("jarvis.cleanupDuplicates", &["проанализируй дубли", "найди повторные дубли", "analyze duplicate takes", "find repeated takes"]),
+    ("audioCleanup.apply", &["примени удаление тишины", "apply silence removal"]),
+    ("audioCleanup.cancel", &["отмени анализ звука", "cancel audio analysis"]),
+    ("downloader.probe", &["проверь ссылку загрузчика", "проверить ссылку", "check download link"]),
+    ("downloader.download", &["начни загрузку", "скачай видео по ссылке", "start download"]),
+    ("downloader.cancel", &["отмени загрузку", "cancel download"]),
+    ("downloader.import", &["импортируй скачанное", "import download"]),
     ("voice.autoEdit", &["edit", "эдит", "сделай edit", "сделай эдит", "сделай монтаж под музыку", "make an edit", "make edit", "create beat edit"]),
     (
         "sequence.addEdit",
@@ -225,6 +251,9 @@ fn parse_single(text: &str) -> Option<Intent> {
     if let Some(intent) = numeric(&phrase) {
         return Some(intent);
     }
+    if let Some(intent) = super::workflows::parse(&phrase) {
+        return Some(intent);
+    }
     // Exact matches always win over approximate transcription corrections.
     if let Some(id) = aliases(&phrase, false) {
         return Some(Intent::new(id, json!({})));
@@ -264,7 +293,7 @@ fn parse_single(text: &str) -> Option<Intent> {
 
 // Intentionally bounded integers: never infer units, truncate unknown suffixes or fuzzy-match
 // parameterized commands. Decimal/timecode/free-form field dictation is not supported here.
-fn number(s: &str) -> Option<i64> {
+pub(super) fn number(s: &str) -> Option<i64> {
     if let Some((tens, units)) = s.split_once(' ') {
         if units.contains(' ') {
             return None;

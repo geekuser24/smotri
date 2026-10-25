@@ -22,6 +22,10 @@ macro_rules! uic {
 }
 
 pub const UI_COMMANDS: &[UiCommand] = &[
+    uic!("graphs.open", "Graphs", [], None),
+    uic!("graphs.set", "Edit Easing Curve", [], None),
+    uic!("graphs.apply", "Apply Easing Curve", [], None),
+    uic!("graphs.inspect", "Inspect Easing Curve", [], None),
     uic!("window.dockAction", "Docking Action", [], None),
     uic!("window.dockPanel", "Dock Panel", [], None),
     uic!("window.floatPanel", "Undock Panel", [], None),
@@ -155,6 +159,12 @@ pub const UI_COMMANDS: &[UiCommand] = &[
     uic!("app.settings.audio", "Audio…", ["Edit", "Preferences"], None),
     uic!("app.settings.audioHardware", "Audio Hardware…", ["Edit", "Preferences"], None),
     uic!("app.settings.inserts", "Inserts", ["Edit", "Preferences"], None),
+    uic!("app.settings.soundpad", "SoundPad", ["Edit", "Preferences"], None),
+    uic!("soundpad.search", "Search sounds", [], None),
+    uic!("soundpad.preview", "Preview sound", [], None),
+    uic!("soundpad.stop", "Stop sound preview", [], None),
+    uic!("soundpad.import", "Import sound", [], None),
+    uic!("soundpad.inspect", "Inspect SoundPad", [], None),
     uic!("inserts.search", "Search GIFs", [], None),
     uic!("inserts.import", "Import GIF", [], None),
     uic!("inserts.inspect", "Inspect Inserts", [], None),
@@ -166,6 +176,7 @@ pub const UI_COMMANDS: &[UiCommand] = &[
     uic!("downloader.reveal", "Show download in folder", [], None),
     uic!("downloader.inspect", "Inspect downloader", [], None),
     uic!("app.settings.jarvis", "Jarvis", ["Edit", "Preferences"], None),
+    uic!("app.settings.verticalVideos", "Vertical Videos", ["Edit", "Preferences"], None),
     uic!("app.settings.autoSave", "Auto Save…", ["Edit", "Preferences"], None),
     uic!("app.settings.color", "Color…", ["Edit", "Preferences"], None),
     uic!("app.settings.graphics", "Graphics…", ["Edit", "Preferences"], None),
@@ -202,8 +213,14 @@ pub fn invoke(app: &mut FilmcraftApp, ctx: &egui::Context, id: &str, mut params:
         return app.session.execute("voice.transcribe", json!({"scope":"timeline"})).map_err(|e| e.to_string());
     }
 
+    if id.starts_with("graphs.") {
+        return crate::panels::graphs::command(app, id, params);
+    }
     if id.starts_with("downloader.") {
         return crate::downloader::command(app, id, params);
+    }
+    if id.starts_with("soundpad.") {
+        return crate::soundpad::command(app, id, params);
     }
     if id.starts_with("inserts.") {
         return crate::inserts::command(app, id, params);
@@ -669,6 +686,13 @@ fn remember_stale_clipboard_media(app: &mut FilmcraftApp) {
 
 fn clipboard_media_key(media: &crate::ClipboardMedia) -> String {
     match media {
+        crate::ClipboardMedia::Error(message) => format!("error:{message}"),
+        crate::ClipboardMedia::Gif(bytes) => {
+            use std::hash::{Hash, Hasher};
+            let mut h = std::collections::hash_map::DefaultHasher::new();
+            bytes.hash(&mut h);
+            format!("gif:{}", h.finish())
+        }
         crate::ClipboardMedia::Files(paths) => format!("files:{}", paths.join("\0")),
         crate::ClipboardMedia::Image { width, height, rgba } => {
             let mut h: u64 = 0xcbf2_9ce4_8422_2325;
@@ -698,11 +722,19 @@ fn put_clip_names_on_system_clipboard(app: &FilmcraftApp, ctx: &egui::Context) {
 /// imported into the shown bin in the Project panel. None when the clipboard holds neither.
 fn paste_clipboard_media(app: &mut FilmcraftApp, insert: bool) -> Option<Result<Value, String>> {
     let media = (app.hooks.clipboard_media.as_mut()?)()?;
+    if let crate::ClipboardMedia::Error(message) = &media {
+        return Some(Err(message.clone()));
+    }
     if app.stale_clipboard_media.as_ref() == Some(&clipboard_media_key(&media)) {
         return None;
     }
     let paths = match media {
         crate::ClipboardMedia::Files(paths) => paths,
+        crate::ClipboardMedia::Error(message) => return Some(Err(message)),
+        crate::ClipboardMedia::Gif(bytes) => match filmcraft_engine::paste_media::save_pasted_gif(&mut app.session, &bytes) {
+            Ok(path) => vec![path],
+            Err(e) => return Some(Err(e.to_string())),
+        },
         crate::ClipboardMedia::Image { width, height, rgba } => match encode_png(width, height, rgba)
             .and_then(|png| filmcraft_engine::paste_media::save_pasted_image(&mut app.session, &png).map_err(|e| e.to_string()))
         {
@@ -710,12 +742,16 @@ fn paste_clipboard_media(app: &mut FilmcraftApp, insert: bool) -> Option<Result<
             Err(e) => return Some(Err(e)),
         },
     };
-    let params = json!({"paths": paths, "insert": insert, "place": app.ui.focused == PanelKind::Timeline, "bin": app.import_bin().0});
+    let params = json!({"paths": paths, "insert": insert, "place": app.ui.focused == PanelKind::Timeline && app.session.prefs.clipboard.add_to_timeline && app.session.active_sequence().is_some(), "bin": app.import_bin().0});
     Some(app.session.execute("edit.pasteMedia", params).map_err(|e| e.to_string()))
 }
 
 /// A compressed PNG of a clipboard image; an error when its size and pixels disagree.
 fn encode_png(width: usize, height: usize, rgba: Vec<u8>) -> Result<Vec<u8>, String> {
+    let size = width.checked_mul(height).and_then(|n| n.checked_mul(4)).ok_or("Clipboard image is too large")?;
+    if width == 0 || height == 0 || width > 32768 || height > 32768 || size > 256 * 1024 * 1024 || size != rgba.len() {
+        return Err("Invalid or oversized clipboard image".into());
+    }
     let (w, h) = (u32::try_from(width).map_err(|e| e.to_string())?, u32::try_from(height).map_err(|e| e.to_string())?);
     let img = image::RgbaImage::from_raw(w, h, rgba).ok_or("the image on the clipboard is malformed")?;
     let mut png = Vec::new();
@@ -748,6 +784,9 @@ pub fn menu_items(app: &FilmcraftApp) -> Vec<MenuItem> {
     for it in &mut v {
         it.label = app.ui.language.tr(&it.label).to_string();
         match it.id.as_str() {
+            "edit.paste" | "edit.pasteInsert" if app.hooks.clipboard_media.is_some() && matches!(app.ui.focused, PanelKind::Timeline | PanelKind::Project) => {
+                it.enabled = true
+            }
             "app.language.english" => it.checked = Some(app.ui.language == crate::i18n::Language::En),
             "app.language.japanese" => it.checked = Some(app.ui.language == crate::i18n::Language::Ja),
             "app.language.spanish" => it.checked = Some(app.ui.language == crate::i18n::Language::Es),

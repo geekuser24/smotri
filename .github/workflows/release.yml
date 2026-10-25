@@ -26,11 +26,16 @@ jobs:
     env:
       MACOSX_DEPLOYMENT_TARGET: "12.0"
       FILMCRAFT_BUILD_SHA: ${{ github.sha }}
+      CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS: -C target-feature=+crt-static
+      CARGO_TARGET_AARCH64_PC_WINDOWS_MSVC_RUSTFLAGS: -C target-feature=+crt-static
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: preview-${{ matrix.target }}
       - name: Linux build dependencies
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y pkg-config libxkbcommon-dev libwayland-dev libx11-dev libxcb1-dev libxcursor-dev libxrandr-dev libxi-dev libfontconfig1-dev libfreetype-dev libasound2-dev libudev-dev
@@ -39,23 +44,12 @@ jobs:
       - name: Native CLI smoke test
         shell: bash
         run: target/${{ matrix.target }}/release/filmcraft-cli --help
-      - name: Stage validation artifacts
-        shell: python
-        run: |
-          import pathlib, shutil, hashlib, json, os
-          out=pathlib.Path('dist/validation');out.mkdir(parents=True,exist_ok=True)
-          suffix='.exe' if os.name=='nt' else ''
-          for name in ('filmcraft','filmcraft-cli'):
-              src=pathlib.Path('target/${{ matrix.target }}/release')/(name+suffix)
-              shutil.copy2(src,out/(name.replace('filmcraft','Smotri')+suffix))
-          for name in ('LICENSE-MIT','LICENSE-APACHE','NOTICE'):
-              shutil.copy2(name,out/name)
-          (out/'README.txt').write_text('Smotri native validation build. Not a complete public installer: bundled Downloader tools and platform launch/import/export validation are required before release. API keys are not included.\n')
-          (out/'SHA256SUMS.json').write_text(json.dumps({p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in out.iterdir() if p.is_file()},indent=2))
+      - name: Package preview with version and checksums
+        run: python packaging/preview.py --target ${{ matrix.target }} --platform ${{ matrix.name }} --version 0.12.0-preview.20261025 --sha ${{ github.sha }}
       - uses: actions/upload-artifact@v4
         with:
-          name: Smotri-${{ matrix.name }}-validation
-          path: dist/validation/
+          name: Smotri-${{ matrix.name }}-preview
+          path: dist/preview/
           if-no-files-found: error
           retention-days: 14
   web:
@@ -66,8 +60,30 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: preview-wasm
       - run: cargo build --release --locked -p filmcraft-web --target wasm32-unknown-unknown
       - uses: actions/upload-artifact@v4
         with:
           name: Smotri-WebAssembly-validation
           path: target/wasm32-unknown-unknown/release/filmcraft_web.wasm
+  publish:
+    name: Publish preview downloads
+    needs: [native, web]
+    if: startsWith(github.ref, 'refs/tags/smotri-v')
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist/downloads
+          merge-multiple: true
+      - name: Publish only after all platform jobs succeed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$RELEASE_TAG" dist/downloads/* --verify-tag --prerelease --title "Smotri 0.12.0 · Preview 2026-10-25" --notes-file CHANGELOG-SMOTRI.md

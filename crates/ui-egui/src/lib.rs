@@ -59,7 +59,9 @@ pub mod perf;
 pub mod play_ahead;
 mod rtl;
 pub mod scrub;
+pub mod shorts;
 mod shuttle;
+pub mod soundpad;
 pub mod source_playback;
 pub mod state;
 pub mod theme;
@@ -182,6 +184,10 @@ pub struct HostHooks {
 pub enum ClipboardMedia {
     /// Files copied in the file manager.
     Files(Vec<String>),
+    /// Original GIF data; retains all frames rather than converting the first frame to PNG.
+    Gif(Vec<u8>),
+    /// Recognized media that cannot be safely read. Never fall through to stale clip paste.
+    Error(String),
     /// An image (a screenshot, an image copied in a browser): 8-bit RGBA, row by row.
     Image { width: usize, height: usize, rgba: Vec<u8> },
 }
@@ -300,6 +306,8 @@ pub struct FilmcraftApp {
     pub jarvis: jarvis::Jarvis,
     pub audio_cleanup: panels::audio_cleanup::State,
     pub inserts: inserts::Inserts,
+    pub soundpad: soundpad::SoundPad,
+    pub shorts: shorts::State,
     pub downloader: downloader::Downloader,
     pub dialog: Option<Dialog>,
     pub file_dialogs: panels::file_dialogs::FileDialogState,
@@ -572,6 +580,8 @@ impl FilmcraftApp {
             jarvis: jarvis::Jarvis::default(),
             audio_cleanup: Default::default(),
             inserts: inserts::Inserts::default(),
+            soundpad: Default::default(),
+            shorts: Default::default(),
             downloader: downloader::Downloader::default(),
             // Unsaved changes left by a session that died are offered first thing.
             dialog: recovery.then_some(Dialog::Recovery),
@@ -2183,6 +2193,7 @@ impl eframe::App for FilmcraftApp {
         if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             downloader::tick(self, ctx);
             panels::audio_cleanup::tick(self);
+            shorts::tick(self);
         }))
         .is_err()
         {
@@ -2227,6 +2238,7 @@ impl eframe::App for FilmcraftApp {
             self.frame(ui);
             jarvis::tick(self, ui.ctx());
             inserts::tick(self, ui.ctx());
+            soundpad::tick(self, ui.ctx());
         }))
         .is_err()
         {

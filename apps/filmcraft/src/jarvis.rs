@@ -11,8 +11,6 @@ use std::sync::{
 use std::time::{Duration, Instant};
 use tungstenite::{Message, client::IntoClientRequest, stream::MaybeTlsStream};
 
-const SERVICE: &str = "FilmCraft.Jarvis.ElevenLabs";
-const ACCOUNT: &str = "api-key";
 pub struct NativeVoice {
     key: String,
     stop: Arc<AtomicBool>,
@@ -23,15 +21,7 @@ pub struct NativeVoice {
 }
 impl NativeVoice {
     pub fn new() -> Self {
-        #[cfg(target_os = "macos")]
-        let saved = if std::env::var_os("SMOTRI_NO_SAVED_CREDENTIALS").is_some() {
-            None
-        } else {
-            security_framework::passwords::get_generic_password(SERVICE, ACCOUNT).ok()
-        }
-        .and_then(|v| String::from_utf8(v).ok());
-        #[cfg(not(target_os = "macos"))]
-        let saved: Option<String> = None;
+        let saved = crate::credentials::load(false);
         Self {
             key: saved.or_else(|| std::env::var("ELEVENLABS_API_KEY").ok()).unwrap_or_default(),
             stop: Arc::new(AtomicBool::new(true)),
@@ -51,8 +41,7 @@ impl VoiceHost for NativeVoice {
         if key.len() < 20 || key.len() > 256 {
             return Err("Invalid ElevenLabs API key".into());
         }
-        #[cfg(target_os = "macos")]
-        security_framework::passwords::set_generic_password(SERVICE, ACCOUNT, key.as_bytes()).map_err(|_| "Could not save the API key in macOS Keychain")?;
+        crate::credentials::save(false, &key)?;
         self.key = key;
         Ok(())
     }

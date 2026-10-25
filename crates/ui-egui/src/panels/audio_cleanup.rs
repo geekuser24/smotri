@@ -280,3 +280,15 @@ pub fn show(app: &mut FilmcraftApp, ui: &mut egui::Ui, rect: egui::Rect, duplica
         app.audio_cleanup.silence = Some(d);
     }
 }
+
+/// Shared voice/UI take preview with an explicit playback stop boundary.
+pub fn preview_command(app: &mut FilmcraftApp, p: &Value) -> Result<Value, String> {
+    let v = app.session.execute("audioCleanup.preview", p.clone()).map_err(|e| e.to_string())?;
+    let a = v["start"].as_i64().ok_or("Invalid take start")?;
+    let b = v["end"].as_i64().ok_or("Invalid take end")?;
+    app.stop();
+    app.session.set_playhead(Tick(a));
+    app.audio_cleanup.preview_end = Some(Tick(b));
+    app.play(1.);
+    Ok(v)
+}

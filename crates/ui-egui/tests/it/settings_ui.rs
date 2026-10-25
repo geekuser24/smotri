@@ -723,3 +723,20 @@ fn label_color_presets() {
     d.click("settings.cancel");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn inserts_clipboard_option_has_cancel_and_save_semantics() {
+    let mut d = Driver::demo();
+    d.exec("app.language.russian", json!({}));
+    d.menu("app.settings.inserts");
+    assert!(d.has("settings.clipboard.addToTimeline"));
+    d.shot("clipboard");
+    d.click("settings.clipboard.addToTimeline");
+    d.click("settings.cancel");
+    assert!(d.harness.state().session.prefs.clipboard.add_to_timeline);
+    d.menu("app.settings.inserts");
+    d.click("settings.clipboard.addToTimeline");
+    d.click("settings.ok");
+    assert!(!d.harness.state().session.prefs.clipboard.add_to_timeline);
+    assert!(d.harness.state().session.prefs.inserts.add_to_timeline);
+}

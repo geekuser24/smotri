@@ -104,3 +104,5 @@ control bounds, overflow actions and Source drag payloads across monitor widths 
 ## Jarvis voice control
 
 The header Jarvis toggle uses the native VoiceHost adapter and a bounded RU/EN command grammar. See [Jarvis](../../docs/jarvis.md) for setup, supported phrases and privacy.
+
+SoundPad is a dockable MyInstants search/preview/import browser with settings and stable `soundpad.*` automation commands. [Workflow and limits](../../docs/soundpad.md). Jarvis also routes the new docked media workflows through their existing commands, including vertical-video analysis, creation and export.

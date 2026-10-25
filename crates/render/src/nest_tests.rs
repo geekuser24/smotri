@@ -243,6 +243,14 @@ fn captions_inside_a_nest_are_part_of_its_picture() {
     assert!(worst(&r.frame(outer, Tick(TICKS_PER_SECOND + 1000)), &without) < 0.01);
     // the frame plan gives the same picture
     assert!(worst(&r.planned(outer, t), &with) < 0.02);
+    // Shorts can replace source captions without drawing the words twice. Old projects default to true.
+    let clip = &mut r.p.sequence_mut(outer).unwrap().video_tracks[0].items[0];
+    clip.effects.iter_mut().find(|e| e.effect == "motion").unwrap().params.get_mut("nested_captions").unwrap().value = ParamValue::Bool(false);
+    assert!(worst(&r.frame(outer, t), &without) < 0.01);
+    assert!(worst(&r.planned(outer, t), &without) < 0.02);
+
+    let clip = &mut r.p.sequence_mut(outer).unwrap().video_tracks[0].items[0];
+    clip.effects.iter_mut().find(|e| e.effect == "motion").unwrap().params.get_mut("nested_captions").unwrap().value = ParamValue::Bool(true);
     // and the outer sequence's own captions are still its own business: with captions off for
     // the outer render, the nested ones show all the same
     let mut outer_track = CaptionTrack::new(TrackId(9003), "Outer".into(), CaptionFormat::Subtitle);

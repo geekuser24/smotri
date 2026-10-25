@@ -107,6 +107,7 @@ const NEW_IDS: &[&str] = &[
     "rotate_3d",
     "auto_reframe",
     "camera_shake",
+    "shaker",
     "grow",
     "shrink",
     "move",
@@ -676,6 +677,7 @@ fn write_on_follows_the_animated_brush() {
             interp: Interpolation::Linear,
             out_influence: 1.0 / 3.0,
             in_influence: 1.0 / 3.0,
+            easing: None,
         },
         Keyframe {
             time: Tick::from_seconds_f64(1.0),
@@ -683,6 +685,7 @@ fn write_on_follows_the_animated_brush() {
             interp: Interpolation::Linear,
             out_influence: 1.0 / 3.0,
             in_influence: 1.0 / 3.0,
+            easing: None,
         },
     ];
     // half way: painted from x=5 to x=20, not beyond

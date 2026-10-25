@@ -501,3 +501,54 @@
 
 	Regional restrictions? Try NetFix VPN	Региональные ограничения? Попробуй NetFix VPN
 	Smotri	Смотри
+
+	Vertical Videos	Вертикальные видео
+	Show Nested Captions	Показывать вложенные субтитры
+
+	Beat Edit	Эдит
+	Shake Preset	Пресет тряски
+	Hit Mode	Хит-режим
+	Hit Trigger	Удар
+	Hit Duration	Длительность удара
+	Shake Strength	Сила тряски
+	Flash / Flicker	Вспышка / фликер
+	Ripple Amount	Сила ряби
+	Random Seed	Вариант движения
+	Mirror Edges	Зеркальные края
+	Hit	Ударный
+	EDIT Flash	EDIT со вспышкой
+	Handheld	С рук
+	Each Hit Trigger key starts a new shake. No keys means no shake in Hit Mode.	Каждый ключ «Удар» запускает тряску. В хит-режиме без ключей тряски нет.
+	Analysis channel:	Канал для анализа:
+	All channels (mix)	Все каналы (микс)
+	Reference clip:	Опорный клип:
+	Use reference track	По опорной дорожке
+	Overlapping clips move to free tracks automatically.	Пересекающиеся клипы автоматически размещаются на свободных дорожках.
+	Synchronize Clips	Синхронизация клипов
+	Synchronize Point	Способ синхронизации
+	Reference track:	Опорная дорожка:
+	In Points	По началу клипов
+	Out Points	По концу клипов
+	Ignore Hours	Без учёта часов
+	Clip Marker	По маркеру клипа
+	Channel	Канал
+	Offset:	Поправка:
+	 frames	 кадр.
+	{n} clip(s) selected. Choose the recording used as the time reference.	Выбрано клипов: {n}. Укажите запись, относительно которой выровнять остальные.
+	Create Multi-Camera Source Sequence	Создать мультикамерную секвенцию
+	Sequence Name:	Название секвенции:
+	Camera Names	Названия камер
+	Camera 1	Камера 1
+	All Cameras	Все камеры
+	Switch Audio	Переключать звук
+	Clip Names	Названия клипов
+	Enumerate Cameras	Нумерация камер
+	Camera Angle Metadata	Из метаданных камеры
+	Move source clips to Processed Clips bin	Переместить исходники в папку «Обработанные клипы»
+
+	Graphs	Графики
+
+	Clipboard	Буфер обмена
+	Add clipboard media to timeline	Добавлять из буфера обмена на таймлайн
+	Paste images or GIF files with Cmd+V on Mac or Ctrl+V on Windows/Linux. Turn off to import into the project only.	Вставляйте изображения и GIF через Cmd+V на Mac или Ctrl+V на Windows/Linux. Выключите, чтобы импортировать только в проект.
+	Uses a free track at the playhead. Without an active sequence, imports into the project.	Вставляет на свободную дорожку у курсора. Если секвенция не открыта — только в проект.

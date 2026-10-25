@@ -91,6 +91,8 @@ fn categories_follow_editor_order() {
             "audio",
             "audioHardware",
             "jarvis",
+            "verticalVideos",
+            "soundpad",
             "inserts",
             "downloader",
             "autoSave",
@@ -118,7 +120,8 @@ fn every_schema_key_exists_with_a_valid_default() {
     let mut seen = std::collections::HashSet::new();
     for (cat, f) in fields {
         assert!(seen.insert(f.key), "duplicate {}", f.key);
-        assert!(f.key.starts_with(&format!("{cat}.")), "{} is not under {cat}", f.key);
+        // Clipboard import has its own persisted preference, displayed alongside inserts.
+        assert!(f.key.starts_with(&format!("{cat}.")) || (cat == "inserts" && f.key == "clipboard.addToTimeline"), "{} is not under {cat}", f.key);
         let v = p.get(f.key).unwrap_or_else(|| panic!("no preference {}", f.key));
         assert!(keys.iter().any(|k| k == f.key), "{} not a leaf key", f.key);
         settings::validate(f.key, &v).unwrap_or_else(|e| panic!("default of {}: {e}", f.key));

@@ -249,3 +249,79 @@ fn ctrl_c_then_ctrl_v_pastes_clips_not_lingering_files() {
     d.ctrl_v_with_text();
     assert_eq!(d.clips().iter().filter(|c| c.0 == 'V' && c.3 == first.3).count(), n + 1);
 }
+
+#[test]
+fn clipboard_preference_is_independent_and_persists() {
+    let mut d = Driver::demo("preference");
+    assert!(d.app().session.prefs.clipboard.add_to_timeline);
+    d.ok("engine.execute", json!({"command":"prefs.set","params":{"key":"clipboard.addToTimeline","value":false}}));
+    assert!(!d.app().session.prefs.clipboard.add_to_timeline);
+    assert!(d.app().session.prefs.inserts.add_to_timeline);
+    let restored: filmcraft_engine::autosave::Preferences = serde_json::from_value(serde_json::to_value(&d.app().session.prefs).unwrap()).unwrap();
+    assert!(!restored.clipboard.add_to_timeline);
+    d.ok("ui.set", json!({"focused":"Timeline"}));
+    d.clipboard(Some(red_image));
+    let before = d.clips();
+    let items = d.app().session.project.items.len();
+    d.ctrl_v_without_text(egui::Modifiers::COMMAND);
+    assert_eq!(d.clips(), before);
+    assert_eq!(d.app().session.project.items.len(), items + 1);
+}
+fn animated_gif() -> Vec<u8> {
+    let mut bytes = Vec::new();
+    {
+        let mut encoder = image::codecs::gif::GifEncoder::new(&mut bytes);
+        encoder.set_repeat(image::codecs::gif::Repeat::Infinite).unwrap();
+        for color in [[255, 0, 0, 255], [0, 255, 0, 255]] {
+            encoder
+                .encode_frame(image::Frame::from_parts(image::RgbaImage::from_pixel(8, 8, image::Rgba(color)), 0, 0, image::Delay::from_numer_denom_ms(100, 1)))
+                .unwrap();
+        }
+    }
+    bytes
+}
+#[test]
+fn original_gif_bytes_and_animation_survive_paste_and_undo() {
+    let mut d = Driver::demo("animated");
+    d.ok("ui.set", json!({"focused":"Timeline"}));
+    let bytes = animated_gif();
+    let expected = bytes.clone();
+    d.app().hooks.clipboard_media = Some(Box::new(move || Some(ClipboardMedia::Gif(bytes.clone()))));
+    let before = d.clips();
+    let undo = d.app().session.history.undo.len();
+    d.ctrl_v_without_text(egui::Modifiers::COMMAND);
+    assert_eq!(d.clips().len(), before.len() + 1);
+    assert_eq!(d.app().session.history.undo.len(), undo + 1);
+    let saved = std::fs::read(d.dir.join("Pasted Image 1.gif")).unwrap();
+    assert_eq!(saved, expected);
+    let source = filmcraft_media::open_bytes("clipboard.gif", saved.into(), &[]).unwrap();
+    assert_eq!(source.info().kind, filmcraft_media::MediaKind::Movie);
+    assert_eq!(source.info().duration, filmcraft_time::Tick::from_seconds_f64(0.2));
+    d.ok("ui.menu.invoke", json!({"id":"edit.undo"}));
+    assert_eq!(d.clips(), before);
+}
+#[test]
+fn clipboard_without_sequence_imports_and_bad_payload_does_not_edit() {
+    let mut d = Driver::demo("no-sequence");
+    d.app().session.state.active_sequence = None;
+    d.ok("ui.set", json!({"focused":"Timeline"}));
+    d.clipboard(Some(red_image));
+    let n = d.app().session.project.items.len();
+    d.ctrl_v_without_text(egui::Modifiers::COMMAND);
+    assert_eq!(d.app().session.project.items.len(), n + 1);
+    let before = serde_json::to_value(&d.app().session.project).unwrap();
+    for payload in [
+        ClipboardMedia::Image { width: usize::MAX, height: 8, rgba: vec![] },
+        ClipboardMedia::Gif(b"bad gif".to_vec()),
+        ClipboardMedia::Error("clipboard unavailable".into()),
+    ] {
+        let mut value = Some(payload);
+        d.app().hooks.clipboard_media = Some(Box::new(move || value.take()));
+        let (req, rx) = ControlRequest::new("ui.menu.invoke", json!({"id":"edit.paste"}));
+        d.tx.send(req).unwrap();
+        d.frames(3);
+        let r = rx.try_recv().unwrap();
+        assert_eq!(r["ok"], false, "{r}");
+        assert_eq!(serde_json::to_value(&d.app().session.project).unwrap(), before);
+    }
+}

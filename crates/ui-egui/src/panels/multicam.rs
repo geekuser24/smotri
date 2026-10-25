@@ -58,7 +58,9 @@ pub fn route(app: &mut FilmcraftApp, id: &str, params: &Value) -> Option<Result<
         }
         _ => {}
     }
-    if !params.as_object().is_none_or(|m| m.is_empty()) {
+    let from_timeline = matches!(id, "clip.createMulticam" | "clip.mergeClips")
+        && params.as_object().is_some_and(|p| p.len() == 1 && p.get("fromTimeline").and_then(Value::as_bool) == Some(true));
+    if !from_timeline && !params.as_object().is_none_or(|m| m.is_empty()) {
         return None;
     }
     let kind = match id {
@@ -71,7 +73,21 @@ pub fn route(app: &mut FilmcraftApp, id: &str, params: &Value) -> Option<Result<
         return Some(Err(e));
     }
     // the Project panel's selection, or the media of the clips selected in the Timeline (#1362)
-    let selected = filmcraft_engine::multicam::selected_items(&app.session);
+    let selected = if from_timeline {
+        let mut items = Vec::new();
+        if let Some(q) = app.session.active_sequence() {
+            for id in &app.session.state.selection {
+                if let Some((_, c)) = q.find_item(*id)
+                    && !items.contains(&c.item)
+                {
+                    items.push(c.item);
+                }
+            }
+        }
+        items
+    } else {
+        filmcraft_engine::multicam::selected_items(&app.session)
+    };
     let items: Vec<u64> = selected.iter().map(|i| i.0).collect();
     let first = selected.first().and_then(|i| app.session.project.item(*i)).map(|i| i.name.clone()).unwrap_or_default();
     let name = match kind {
@@ -123,7 +139,7 @@ pub fn show_dialog(app: &mut FilmcraftApp, ctx: &egui::Context) {
                 ui.add_space(4.0);
             } else {
                 let n = app.session.state.selection.len();
-                ui.label(RichText::new(tlf!("{n} clip(s) selected; the clip on the reference track stays put.", n)).weak().small());
+                ui.label(RichText::new(tlf!("{n} clip(s) selected. Choose the recording used as the time reference.", n)).weak().small());
             }
             ui.group(|ui| {
                 ui.set_min_width(400.0);
@@ -151,6 +167,20 @@ pub fn show_dialog(app: &mut FilmcraftApp, ctx: &egui::Context) {
                         }
                     });
                 }
+                if d.method == "audio" {
+                    ui.horizontal(|ui| {
+                        ui.label(tl!("Analysis channel:"));
+                        let label = if d.channel == 0 { tl!("All channels (mix)").to_string() } else { format!("{} {}", tl!("Channel"), d.channel) };
+                        let combo = egui::ComboBox::from_id_salt((pre, "channel")).selected_text(label).show_ui(ui, |ui| {
+                            for channel in 0..=32 {
+                                let label = if channel == 0 { tl!("All channels (mix)").to_string() } else { format!("{} {channel}", tl!("Channel")) };
+                                let r = ui.selectable_value(&mut d.channel, channel, &label);
+                                push(&mut elems, format!("{pre}.channel.{channel}"), &r, &label);
+                            }
+                        });
+                        push(&mut elems, format!("{pre}.channel"), &combo.response, "analysis channel");
+                    });
+                }
                 ui.horizontal(|ui| {
                     ui.label(if pre == "merge" { tl!("Offset Audio by:") } else { tl!("Offset:") });
                     let r = ui.add(crate::widgets::number_drag(&mut d.offset).range(-100_000..=100_000).suffix(tl!(" frames")));
@@ -159,6 +189,31 @@ pub fn show_dialog(app: &mut FilmcraftApp, ctx: &egui::Context) {
             });
             match pre {
                 "sync" => {
+                    let refs: Vec<(u64, String)> = app
+                        .session
+                        .state
+                        .selection
+                        .iter()
+                        .filter_map(|id| {
+                            let q = app.session.active_sequence()?;
+                            let (track, c) = q.find_item(*id)?;
+                            Some((id.0, format!("{} · {} · #{}", q.track(track)?.name, c.name, id.0)))
+                        })
+                        .collect();
+                    ui.horizontal(|ui| {
+                        ui.label(tl!("Reference clip:"));
+                        let label = refs.iter().find(|(id, _)| *id == d.reference).map(|(_, name)| name.as_str()).unwrap_or(tl!("Use reference track"));
+                        let combo = egui::ComboBox::from_id_salt("sync.reference").width(270.).selected_text(label).show_ui(ui, |ui| {
+                            let r = ui.selectable_value(&mut d.reference, 0, tl!("Use reference track"));
+                            push(&mut elems, "sync.reference.0", &r, "automatic reference");
+                            for (id, name) in &refs {
+                                let r = ui.selectable_value(&mut d.reference, *id, name);
+                                push(&mut elems, format!("sync.reference.{id}"), &r, name);
+                            }
+                        });
+                        push(&mut elems, "sync.reference", &combo.response, "reference clip");
+                    });
+                    ui.label(RichText::new(tl!("Overlapping clips move to free tracks automatically.")).weak().small());
                     ui.horizontal(|ui| {
                         ui.label(tl!("Reference track:"));
                         let r = ui.add(egui::TextEdit::singleline(&mut d.track).hint_text(tl!("lowest (V1…)")).desired_width(90.0));
@@ -226,7 +281,7 @@ pub fn show_dialog(app: &mut FilmcraftApp, ctx: &egui::Context) {
             return;
         }
         Some("ok") => {
-            let mut p = json!({"method": d.method, "offset": d.offset, "ignoreHours": d.ignore_hours});
+            let mut p = json!({"method": d.method, "offset": d.offset, "ignoreHours": d.ignore_hours, "channel": d.channel});
             if !d.marker.is_empty() {
                 p["marker"] = json!(d.marker);
             }
@@ -250,7 +305,9 @@ pub fn show_dialog(app: &mut FilmcraftApp, ctx: &egui::Context) {
                     "clip.createMulticam"
                 }
                 _ => {
-                    if !d.track.is_empty() {
+                    if d.reference != 0 {
+                        p["reference"] = json!(d.reference);
+                    } else if !d.track.is_empty() {
                         p["track"] = json!(d.track);
                     }
                     "clip.synchronize"

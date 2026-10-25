@@ -243,6 +243,18 @@ pub fn settings_page(app: &mut FilmcraftApp, ui: &mut egui::Ui, values: &mut Val
     }
     ui.label(i18n::t("Places the GIF at the playhead on a free video track, creating one if needed."));
     ui.add_space(12.0);
+    ui.heading(i18n::t("Clipboard"));
+    let mut clipboard = values.pointer("/clipboard/addToTimeline").and_then(Value::as_bool).unwrap_or(true);
+    let r = ui.checkbox(&mut clipboard, i18n::t("Add clipboard media to timeline"));
+    app.auto.add("settings.clipboard.addToTimeline", r.rect, "Add clipboard media to timeline");
+    if r.changed()
+        && let Some(slot) = values.pointer_mut("/clipboard/addToTimeline")
+    {
+        *slot = json!(clipboard);
+    }
+    ui.label(i18n::t("Paste images or GIF files with Cmd+V on Mac or Ctrl+V on Windows/Linux. Turn off to import into the project only."));
+    ui.label(i18n::t("Uses a free track at the playhead. Without an active sequence, imports into the project."));
+    ui.add_space(12.0);
     ui.label("GIPHY · GIF");
     ui.add_space(12.);
     let configured = app.inserts.host.as_ref().is_some_and(|h| h.has_key());

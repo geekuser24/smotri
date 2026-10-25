@@ -437,7 +437,7 @@ fn push_item(
             return;
         }
         let (w, h) = output_size(nested, opts.scale);
-        for o in crate::caption_overlays(nested, ft, w, h) {
+        for o in crate::caption_overlays(nested, ft, w, h).into_iter().filter(|_| crate::show_nested_captions(item)) {
             out.push(PlanLayer::new(
                 Arc::new(VideoFrame::rgba_f32(o.w as u32, o.h as u32, o.px)),
                 Affine::translate(o.x as f64, o.y as f64),

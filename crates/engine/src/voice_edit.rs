@@ -1,7 +1,7 @@
 //! Deterministic contextual editing for voice; shared by UI, CLI and control channel.
 use crate::commands::{CommandSpec, has_seq};
 use crate::{EngineError, Result, Session};
-use filmcraft_project::{ClipId, EffectKind, Param, ParamValue, TrackKind, effect::find_effect};
+use filmcraft_project::{ClipId, EffectKind, TrackKind, effect::find_effect};
 use filmcraft_time::{TICKS_PER_SECOND, Tick};
 use serde_json::{Value, json};
 
@@ -202,7 +202,10 @@ fn parameter(s: &mut Session, p: &Value) -> Result<Value> {
                 json!(if op == "percent" { old * (1.0 + n / 100.0) } else { old + n })
             };
             let pid = def.id;
-            s.execute("effects.setParam", json!({"clip":clip,"effect":index,"param":pid,"value":val}))?;
+            s.execute(
+                "effects.setParam",
+                json!({"clip":clip,"effect":index,"param":pid,"value":val,"keyframe":p.get("keyframe").and_then(Value::as_bool).unwrap_or(false)}),
+            )?;
         }
         Ok(json!({"clips":ids,"param":param}))
     })
@@ -258,9 +261,20 @@ fn adjustment(s: &mut Session, p: &Value) -> Result<Value> {
     s.edit_group("Voice: adjustment layer", |s| place_adjustment(s, start, duration))
 }
 
+fn shaker_hit(s: &mut Session, p: &Value) -> Result<Value> {
+    if !p.as_object().is_some_and(|o| o.keys().all(|k| k == "target")) {
+        return Err(err("Shaker hit accepts only a clip target"));
+    }
+    s.edit_group("Shaker Hit", |s| {
+        let target = p.get("target").cloned().unwrap_or(json!({}));
+        parameter(s, &json!({"target":target,"effect":"shaker","param":"hit_mode","value":true}))?;
+        parameter(s, &json!({"target":target,"effect":"shaker","param":"trigger","value":100.,"keyframe":true}))
+    })
+}
 fn shake(s: &mut Session, p: &Value) -> Result<Value> {
     let preset = p.get("preset").and_then(Value::as_str).unwrap_or("hit");
-    if !matches!(preset, "hit" | "edt" | "handheld") {
+    let preset = if preset == "edt" { "edit" } else { preset };
+    if !matches!(preset, "hit" | "edit" | "handheld") {
         return Err(err("unknown shake preset"));
     }
     let placement = p.get("placement").and_then(Value::as_str).unwrap_or(if preset == "handheld" { "clip" } else { "layer" });
@@ -297,46 +311,21 @@ fn shake(s: &mut Session, p: &Value) -> Result<Value> {
             if c.reverse || c.frame_hold.is_some() {
                 return Err(err("shake preset requires a forward clip without a frame hold"));
             }
-            let mut e = find_effect("camera_shake").ok_or_else(|| err("camera shake unavailable"))?.instance();
-            let set = |e: &mut filmcraft_project::EffectInstance, k: &str, v: f64| {
-                e.params.insert(k.into(), Param::new(ParamValue::Float(v)));
-            };
-            set(&mut e, "seed", ((salt ^ id.0.wrapping_mul(7919)) % 10000) as f64);
-            set(&mut e, "frequency", if preset == "handheld" { 1.3 } else { 12.0 });
-            set(&mut e, "complexity", 4.0);
-            set(&mut e, "motion_blur", 25.0);
-            set(&mut e, "amount", if preset == "handheld" { 9.0 } else { 40.0 });
-            set(&mut e, "rotation", if preset == "handheld" { 0.45 } else { 2.0 });
-            set(&mut e, "zoom", if preset == "handheld" { 4.0 } else { 6.0 });
             let start = if c.range().contains(ph) { ph.min((c.end() - fd).max(c.start)) } else { c.start };
-            if preset != "handheld" {
-                for (key, peak) in [("amount", 40.0), ("rotation", 2.0), ("zoom", 6.0)] {
-                    if let Some(p) = e.params.get_mut(key) {
-                        p.put_keyframe(c.source_in, ParamValue::Float(0.0));
-                        p.put_keyframe(c.source_time_at((start - fd).max(c.start)), ParamValue::Float(0.0));
-                        for (ms, factor) in [(0, 1.0), (40, 0.65), (90, 0.3), (150, 0.1), (210, 0.02), (260, 0.0)] {
-                            let t = (start + Tick(ms * TICKS_PER_SECOND / 1000)).min(c.end());
-                            p.put_keyframe(c.source_time_at(t), ParamValue::Float(peak * factor));
-                        }
-                    }
-                }
-            }
+            let choice = match preset {
+                "hit" => 0,
+                "edit" => 1,
+                _ => 2,
+            };
+            let e = filmcraft_project::effect::shaker::instance(
+                choice,
+                preset != "handheld",
+                c.effect_time_at(start),
+                ((salt ^ id.0.wrapping_mul(7919)) % 10000) as u32,
+            )
+            .ok_or_else(|| err("Shaker unavailable"))?;
             let pos = c.effects.iter().position(|e| e.def().is_some_and(|d| d.intrinsic)).unwrap_or(c.effects.len());
             c.effects.insert(pos, e);
-            if preset == "edt" {
-                for (id, param, peak) in [("brightness_contrast", "brightness", 55.0), ("turbulent_displace", "amount", 10.0)] {
-                    let mut e = find_effect(id).ok_or_else(|| err("EDT effect unavailable"))?.instance();
-                    if let Some(p) = e.params.get_mut(param) {
-                        p.value = ParamValue::Float(0.0);
-                        p.put_keyframe(c.source_in, ParamValue::Float(0.0));
-                        p.put_keyframe(c.source_time_at((start - fd).max(c.start)), ParamValue::Float(0.0));
-                        for (ms, v) in [(0, 1.0), (35, 0.2), (70, 0.65), (120, 0.05), (180, 0.25), (280, 0.0)] {
-                            p.put_keyframe(c.source_time_at((start + Tick(ms * TICKS_PER_SECOND / 1000)).min(c.end())), ParamValue::Float(peak * v));
-                        }
-                    }
-                    c.effects.insert(pos, e);
-                }
-            }
         }
         Ok(json!({"clips":ids,"preset":preset}))
     })
@@ -559,7 +548,7 @@ fn split_half(s: &mut Session, p: &Value) -> Result<Value> {
 }
 pub fn commands() -> Vec<CommandSpec> {
     type Run = fn(&mut Session, &Value) -> Result<Value>;
-    [("voice.duration","Voice Clip Duration",duration as Run),("voice.reorder","Voice Reorder Clips",reorder as Run),("voice.adjustmentLayer","Voice Adjustment Layer",adjustment as Run),("voice.plan","Voice Command Chain",plan as Run),("voice.splitHalf","Voice Split Clip in Half",split_half as Run),("voice.rippleDelete","Voice Ripple Delete",ripple_delete as Run),("voice.selectClip","Voice Select Clip",select as Run),("voice.selectEffect","Voice Select Effect",select_effect as Run),("voice.effect","Voice Apply Effect",effect as Run),("voice.parameter","Voice Effect Parameter",parameter as Run),("voice.shake","Voice Shake Preset",shake as Run)].into_iter().map(|(id,label,run)|CommandSpec{id,label,menu:&[],shortcut:None,params:if id == "voice.plan" {r#"{"steps":[{"id":str,"params":object}]}"#} else {r#"{"target":{"kind":"video|audio","track":1,"ordinal":1,"name":str}?,"effect":str?,"param":str?,"value":any?,"op":"set|add|percent"?,"preset":"hit|edt|handheld"?,"placement":"clip|layer"?,"seconds":number?,"position":integer?}"#},enabled:has_seq,run,journal:true}).collect()
+    [("voice.shakerHit","Shaker Hit",shaker_hit as Run),("voice.duration","Voice Clip Duration",duration as Run),("voice.reorder","Voice Reorder Clips",reorder as Run),("voice.adjustmentLayer","Voice Adjustment Layer",adjustment as Run),("voice.plan","Voice Command Chain",plan as Run),("voice.splitHalf","Voice Split Clip in Half",split_half as Run),("voice.rippleDelete","Voice Ripple Delete",ripple_delete as Run),("voice.selectClip","Voice Select Clip",select as Run),("voice.selectEffect","Voice Select Effect",select_effect as Run),("voice.effect","Voice Apply Effect",effect as Run),("voice.parameter","Voice Effect Parameter",parameter as Run),("voice.shake","Voice Shake Preset",shake as Run)].into_iter().map(|(id,label,run)|CommandSpec{id,label,menu:&[],shortcut:None,params:if id == "voice.plan" {r#"{"steps":[{"id":str,"params":object}]}"#} else {r#"{"target":{"kind":"video|audio","track":1,"ordinal":1,"name":str}?,"effect":str?,"param":str?,"value":any?,"op":"set|add|percent"?,"preset":"hit|edit|handheld"?,"placement":"clip|layer"?,"seconds":number?,"position":integer?}"#},enabled:has_seq,run,journal:true}).collect()
 }
 
 #[cfg(test)]
@@ -654,10 +643,10 @@ mod tests {
         assert_eq!(s.history.undo.len(), undo + 1);
         s.execute("edit.undo", json!({})).unwrap();
         assert_eq!(s.project, before);
-        for preset in ["hit", "edt", "handheld"] {
+        for preset in ["hit", "edit", "handheld"] {
             let before = s.project.clone();
             s.execute("voice.shake", json!({"preset":preset,"placement":"clip"})).unwrap();
-            assert!(s.active_sequence().unwrap().find_item(clip.id).unwrap().1.effects.iter().any(|e| e.effect == "camera_shake"));
+            assert!(s.active_sequence().unwrap().find_item(clip.id).unwrap().1.effects.iter().any(|e| e.effect == "shaker"));
             s.execute("edit.undo", json!({})).unwrap();
             assert_eq!(s.project, before);
         }
@@ -683,7 +672,7 @@ mod tests {
             assert_eq!(q.find_item(clip.id).unwrap().1, &clip);
             if command == "voice.shake" {
                 assert!(layer.duration <= Tick(TICKS_PER_SECOND / 3));
-                assert!(layer.effects.iter().any(|e| e.effect == "camera_shake"));
+                assert!(layer.effects.iter().any(|e| e.effect == "shaker"));
             }
             assert_eq!(s.history.undo.len(), undo + 1);
             s.execute("edit.undo", json!({})).unwrap();

@@ -17,11 +17,24 @@ use crate::{EngineError, Result, Session};
 
 /// Write a pasted image (PNG bytes) to a new `Pasted Image <n>.png`; returns its path.
 pub fn save_pasted_image(s: &mut Session, png: &[u8]) -> Result<String> {
+    save_pasted_bytes(s, png, "png")
+}
+/// Retain the original GIF bytes, including animation and frame timing.
+pub fn save_pasted_gif(s: &mut Session, bytes: &[u8]) -> Result<String> {
+    if bytes.len() < 13 || bytes.len() > 64 * 1024 * 1024 || !(bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a")) {
+        return Err(EngineError::Other("Invalid or oversized clipboard GIF".into()));
+    }
+    save_pasted_bytes(s, bytes, "gif")
+}
+fn save_pasted_bytes(s: &mut Session, bytes: &[u8], extension: &str) -> Result<String> {
+    if bytes.is_empty() || bytes.len() > 256 * 1024 * 1024 {
+        return Err(EngineError::Other("Invalid or oversized clipboard image".into()));
+    }
     let dir = crate::voiceover::media_dir(s, &Value::Null, "Pasted Images");
     let names: std::collections::HashSet<String> = s.project.items.values().map(|i| i.name.clone()).collect();
     // bounded like voiceover::unique_wav_path: `file_size` is a filesystem call per try
     let path = (1..=99_999u32)
-        .map(|k| format!("Pasted Image {k}.png"))
+        .map(|k| format!("Pasted Image {k}.{extension}"))
         .map(|file| (std::path::Path::new(&dir).join(&file).to_string_lossy().into_owned(), file))
         .find(|(path, file)| !names.contains(file) && s.services.file_size(path).is_err())
         .map(|(path, _)| path)
@@ -29,7 +42,7 @@ pub fn save_pasted_image(s: &mut Session, png: &[u8]) -> Result<String> {
     if !cfg!(target_arch = "wasm32") {
         std::fs::create_dir_all(&dir).map_err(|e| EngineError::Other(format!("{dir}: {e}")))?;
     }
-    s.services.write_file(&path, png).map_err(|e| EngineError::Other(format!("{path}: {e}")))?;
+    s.services.write_file(&path, bytes).map_err(|e| EngineError::Other(format!("{path}: {e}")))?;
     Ok(path)
 }
 

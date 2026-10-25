@@ -29,6 +29,7 @@ mod args;
 mod audio;
 mod audio_in;
 mod control_server;
+mod credentials;
 #[cfg(target_os = "linux")]
 mod dev_icon;
 mod downloader;
@@ -41,6 +42,8 @@ mod logging;
 #[cfg(target_os = "macos")]
 mod native_menu;
 mod scribe;
+mod shorts;
+mod soundpad;
 mod window_raise;
 
 use args::{Cli, Launch};
@@ -253,8 +256,10 @@ fn app_creator(launch: Launch, graphics: graphics::GraphicsStart, created: Arc<A
             }
         }
         session.transcriber = Some(std::sync::Arc::new(scribe::Scribe));
+        session.shorts_analyst = Some(std::sync::Arc::new(shorts::OpenAi));
         let mut app = FilmcraftApp::new(session);
         app.inserts.host = Some(Box::new(inserts::NativeInserts::new()));
+        app.soundpad.host = Some(Box::new(soundpad::NativeSoundPad::new()));
         app.downloader.host = Some(Box::new(downloader::NativeDownloader::default()));
         app.jarvis.host = Some(Box::new(jarvis::NativeVoice::new()));
         app.graphics_notice = notice;
@@ -364,8 +369,36 @@ fn clipboard_media() -> Option<filmcraft_ui_egui::ClipboardMedia> {
     {
         return Some(filmcraft_ui_egui::ClipboardMedia::Files(files.iter().map(|p| p.to_string_lossy().into_owned()).collect()));
     }
+    #[cfg(target_os = "macos")]
+    if let Some(gif) = clipboard_gif() {
+        return Some(gif);
+    }
     let image = clipboard.get_image().ok()?;
+    let size = image.width.checked_mul(image.height).and_then(|n| n.checked_mul(4));
+    if !size.is_some_and(|n| n > 0 && n <= 256 * 1024 * 1024 && n == image.bytes.len()) || image.width > 32768 || image.height > 32768 {
+        return Some(filmcraft_ui_egui::ClipboardMedia::Error("Clipboard image is too large or malformed".into()));
+    }
     Some(filmcraft_ui_egui::ClipboardMedia::Image { width: image.width, height: image.height, rgba: image.bytes.into_owned() })
+}
+
+/// Safe AppKit bindings preserve GIF data when the source puts the original on the pasteboard.
+#[cfg(target_os = "macos")]
+fn clipboard_gif() -> Option<filmcraft_ui_egui::ClipboardMedia> {
+    read_clipboard_gif(&objc2_app_kit::NSPasteboard::generalPasteboard())
+}
+
+#[cfg(target_os = "macos")]
+fn read_clipboard_gif(board: &objc2_app_kit::NSPasteboard) -> Option<filmcraft_ui_egui::ClipboardMedia> {
+    use objc2_foundation::NSString;
+    for format in ["com.compuserve.gif", "image/gif"] {
+        if let Some(data) = board.dataForType(&NSString::from_str(format)) {
+            if data.length() > 64 * 1024 * 1024 {
+                return Some(filmcraft_ui_egui::ClipboardMedia::Error("Clipboard GIF exceeds 64 MB".into()));
+            }
+            return Some(filmcraft_ui_egui::ClipboardMedia::Gif(data.to_vec()));
+        }
+    }
+    None
 }
 
 /// Open a file in its default application, or reveal it in the file manager (Edit Original,
@@ -561,5 +594,24 @@ mod tests {
         let project = super::project_patterns();
         assert_eq!(project.first().map(String::as_str), Some("fcproj"));
         assert!(project.iter().any(|e| e == "[fF][cC][pP][rR][oO][jJ]"), "{project:?}");
+    }
+}
+
+#[cfg(all(test, target_os = "macos"))]
+mod clipboard_gif_tests {
+    #[test]
+    fn reads_original_gif_from_an_isolated_pasteboard() {
+        use objc2_app_kit::NSPasteboard;
+        use objc2_foundation::{NSData, NSString};
+        let board = NSPasteboard::pasteboardWithUniqueName();
+        board.clearContents();
+        assert!(super::read_clipboard_gif(&board).is_none());
+        let bytes = b"GIF89a\x01\x00\x01\x00\x00\x00\x00";
+        assert!(board.setData_forType(Some(&NSData::with_bytes(bytes)), &NSString::from_str("com.compuserve.gif")));
+        match super::read_clipboard_gif(&board) {
+            Some(filmcraft_ui_egui::ClipboardMedia::Gif(data)) => assert_eq!(data, bytes),
+            _ => panic!("original GIF should be retained"),
+        }
+        board.clearContents();
     }
 }

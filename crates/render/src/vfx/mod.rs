@@ -17,6 +17,7 @@ pub(crate) use color::cdl;
 mod distort;
 mod immersive;
 mod lights;
+mod shaker;
 mod stylize;
 mod temporal;
 mod text;
@@ -484,6 +485,7 @@ pub fn apply(img: &mut Image, e: &EffectInstance, cx: &FxCtx) -> bool {
         "move" => distort::move_fx(img, e, cx),
         "spin" => distort::spin(img, e, cx),
         "wiggle" => distort::wiggle(img, e, cx),
+        "shaker" => shaker::apply(img, e, cx),
         "camera_shake" => distort::camera_shake(img, e, cx),
         "transform" if bv(e, "shutter_override") && fv(e, "shutter_angle", cx) > 0.5 => distort::transform_fx(img, e, cx),
         "spacer" => distort::spacer(img, e, cx),

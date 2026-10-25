@@ -16,6 +16,7 @@ mod audio;
 use crate::mask::Mask;
 pub use audio::{GEQ10_LABELS, GEQ20_LABELS, GEQ30_LABELS, PREMIERE_AUDIO_EFFECTS};
 
+pub mod shaker;
 mod vfx;
 pub use vfx::{EASINGS, ECHO_OPERATORS, FRAME_LAYOUTS, LIGHT_IDS, SIMPLE_BLEND, TRACK_CHOICES, auto_point, ultra_key_setting};
 
@@ -271,6 +272,7 @@ fn build_effects() -> Vec<EffectDef> {
                 fs("scale", "Scale", 100.0, (0.0, 10000.0), (0.0, 100.0), "", 1),
                 fs("scale_width", "Scale Width", 100.0, (0.0, 10000.0), (0.0, 100.0), "", 1),
                 b("uniform_scale", "Uniform Scale", true),
+                b("nested_captions", "Show Nested Captions", true),
                 ang("rotation", "Rotation", 0.0),
                 pt("anchor", "Anchor Point", f64::NAN, f64::NAN),
                 fs("anti_flicker", "Anti-flicker Filter", 0.0, (0.0, 1.0), (0.0, 1.0), "", 2),

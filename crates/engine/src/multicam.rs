@@ -140,7 +140,7 @@ fn base_commands() -> Vec<CommandSpec> {
             "clip.synchronize",
             "Synchronize…",
             &["Clip"],
-            r#"{"method":"in|out|timecode|marker|audio","clips":[id]?,"reference":clip?,"track":"V1"|"A1"?,"ignoreHours":bool?,"marker":str?,"offset":frames?}"#,
+            r#"{"method":"in|out|timecode|marker|audio","clips":[id]?,"reference":clip?,"track":"V1"|"A1"?,"ignoreHours":bool?,"marker":str?,"channel":0..32?,"offset":frames?}"#,
             can_synchronize,
             synchronize,
             true,
@@ -149,7 +149,7 @@ fn base_commands() -> Vec<CommandSpec> {
             "clip.mergeClips",
             "Merge Clips…",
             &["Clip"],
-            r#"{"items":[id]?,"method":"in|out|timecode|marker|audio","name":str?,"removeVideoAudio":bool?,"ignoreHours":bool?,"marker":str?,"offset":frames?}"#,
+            r#"{"items":[id]?,"method":"in|out|timecode|marker|audio","name":str?,"removeVideoAudio":bool?,"ignoreHours":bool?,"marker":str?,"channel":0..32?,"offset":frames?}"#,
             has_two_items,
             merge_clips,
             true,
@@ -158,7 +158,7 @@ fn base_commands() -> Vec<CommandSpec> {
             "clip.createMulticam",
             "Create Multi-Camera Source Sequence…",
             &["Clip"],
-            r#"{"items":[id]?,"name":str?,"method":"in|out|timecode|marker|audio","ignoreHours":bool?,"marker":str?,"offset":frames?,"audio":"camera1|all|switch","cameraNames":"clip|track|metadata","processedBin":bool?,"reference":item?}"#,
+            r#"{"items":[id]?,"name":str?,"method":"in|out|timecode|marker|audio","ignoreHours":bool?,"marker":str?,"channel":0..32?,"offset":frames?,"audio":"camera1|all|switch","cameraNames":"clip|track|metadata","processedBin":bool?,"reference":item?}"#,
             has_items,
             create_multicam,
             true,
@@ -364,6 +364,25 @@ fn synchronize(s: &mut Session, p: &Value) -> Result<Value> {
     let q = s.active_sequence().ok_or(EngineError::NoSequence)?.clone();
     let rate = q.settings.frame_rate;
     let sel = with_links(s, &clips_p(s, p));
+    if sel.len() > 256 {
+        return Err(bad(cmd, "select at most 128 linked sources"));
+    }
+    for id in &sel {
+        let (tid, clip) = q.find_item(*id).ok_or_else(|| bad(cmd, "selected clip is missing"))?;
+        if q.track(tid).is_some_and(|t| t.locked) {
+            return Err(bad(cmd, "unlock the selected tracks before synchronizing"));
+        }
+        if !clip.speed.is_finite()
+            || (clip.speed - 1.).abs() > 0.000001
+            || clip.reverse
+            || clip.frame_hold.is_some()
+            || clip.effects.iter().any(|e| {
+                e.effect == "time_remap" && (e.params.values().any(|p| !p.keyframes.is_empty()) || (e.f64_at("speed", clip.source_in) - 100.).abs() > 0.001)
+            })
+        {
+            return Err(bad(cmd, "synchronize original-speed clips before retiming or reversing them"));
+        }
+    }
     // group into link units
     let mut units: Vec<Unit> = Vec::new();
     let mut seen: Vec<ClipId> = Vec::new();
@@ -391,7 +410,9 @@ fn synchronize(s: &mut Session, p: &Value) -> Result<Value> {
         // the representative: audio for audio sync, else video; lowest track first
         let audio_first = method == Method::Audio;
         cands.sort_by_key(|(k, ti, _)| (if (*k == TrackKind::Audio) == audio_first { 0 } else { 1 }, *ti));
-        let (k, ti, rep) = cands.remove(0);
+        let Some((k, ti, rep)) = cands.into_iter().next() else {
+            return Err(bad(cmd, "empty linked clip group"));
+        };
         units.push(Unit { members, rep, rep_track: (k, ti) });
     }
     if units.len() < 2 {
@@ -409,7 +430,7 @@ fn synchronize(s: &mut Session, p: &Value) -> Result<Value> {
         (0..units.len()).min_by_key(|&i| (if units[i].rep_track.0 == TrackKind::Video { 0 } else { 1 }, units[i].rep_track.1)).unwrap_or(0)
     };
     let clips: Vec<SyncClip> = units.iter().map(|u| sync::timeline_clip(&s.project, &u.rep)).collect();
-    let anchors = sync::anchors(s, &clips, reference, &method, offset_p(p, rate))?;
+    let anchors = sync::anchors(s, &clips, reference, &method, offset_p(p, rate), sync::channel_param(p)?)?;
     // timeline time of each unit's anchor must equal the reference's
     let at = |u: &Unit, a: Tick| u.rep.start + Tick(((a - u.rep.source_in).0 as f64 / u.rep.speed.abs().max(1e-9)).round() as i64);
     let t_ref = at(&units[reference], anchors[reference].anchor);
@@ -454,11 +475,28 @@ fn synchronize(s: &mut Session, p: &Value) -> Result<Value> {
         s.edit(&format!("Synchronize ({})", method.name()), |pr, st| {
             seq_edit(pr, seq_id, &media, |seq, ctx| {
                 edit::delete_items(seq, &remove);
-                let ids = edit::overwrite(seq, placements, ctx)?;
+                let mut ids = Vec::new();
+                for (original, item) in placements {
+                    let kind = q.track(original).ok_or_else(|| bad(cmd, "original track missing"))?.kind;
+                    let free = |t: &Track| !t.locked && edit::track_range_empty(t, item.range());
+                    let target = seq.track(original).filter(|t| free(t)).map(|t| t.id).or_else(|| seq.tracks(kind).iter().find(|t| free(t)).map(|t| t.id));
+                    let target = match target {
+                        Some(id) => id,
+                        None => {
+                            let id = TrackId(*ctx.next_id);
+                            *ctx.next_id = ctx.next_id.checked_add(1).ok_or_else(|| bad(cmd, "track ID overflow"))?;
+                            let tracks = if kind == TrackKind::Video { &mut seq.video_tracks } else { &mut seq.audio_tracks };
+                            tracks.push(Track::new(id, kind, format!("{} {}", if kind == TrackKind::Video { "Video" } else { "Audio" }, tracks.len() + 1)));
+                            id
+                        }
+                    };
+                    // The interval is empty: overwrite cannot trim any other source.
+                    ids.extend(edit::overwrite(seq, vec![(target, item)], ctx)?);
+                }
                 Ok(ids)
             })
-            .map(|ids| {
-                st.selection = ids;
+            .map(|_| {
+                st.selection = sel.clone();
             })
         })?;
     }
@@ -542,7 +580,7 @@ fn merge_clips(s: &mut Session, p: &Value) -> Result<Value> {
     let clips: Vec<SyncClip> = order.iter().map(|&i| clips[i].clone()).collect();
     let settings = settings_for(s, clips[0].item);
     let rate = settings.frame_rate;
-    let anchors = sync::anchors(s, &clips, 0, &method, offset_p(p, rate))?;
+    let anchors = sync::anchors(s, &clips, 0, &method, offset_p(p, rate), sync::channel_param(p)?)?;
     let starts = sync::placements(&clips, &anchors, rate, false);
     let remove_video_audio = bool_p(p, "removeVideoAudio").unwrap_or(false);
     let name = str_p(p, "name").map(str::to_string).unwrap_or_else(|| format!("{} - Merged", clips[0].name));
@@ -619,7 +657,7 @@ fn create_multicam(s: &mut Session, p: &Value) -> Result<Value> {
     };
     let settings = settings_for(s, clips[reference].item);
     let rate = settings.frame_rate;
-    let anchors = sync::anchors(s, &clips, reference, &method, offset_p(p, rate))?;
+    let anchors = sync::anchors(s, &clips, reference, &method, offset_p(p, rate), sync::channel_param(p)?)?;
     let starts = sync::placements(&clips, &anchors, rate, false);
     let rep = sync::report(&clips, &anchors, &starts, rate);
     let name = str_p(p, "name").map(str::to_string).unwrap_or_else(|| format!("{} Multicam", clips[reference].name));

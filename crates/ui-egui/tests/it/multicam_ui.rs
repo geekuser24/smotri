@@ -281,6 +281,11 @@ fn synchronize_and_merge_dialogs() {
     d.ok("ui.menu.invoke", json!({"id": "clip.synchronize"}));
     d.frames(3);
     assert_eq!(d.app().ui.sync_dialog.as_ref().map(|x| x.kind.clone()).as_deref(), Some("synchronize"));
+    assert!(!d.ids("sync.channel").is_empty());
+    assert!(!d.ids("sync.reference").is_empty());
+    d.click("sync.channel");
+    d.click("sync.channel.2");
+    assert_eq!(d.app().ui.sync_dialog.as_ref().unwrap().channel, 2);
     d.click("sync.method.in");
     d.snapshot("multicam-sync-dialog");
     d.click("sync.ok");
@@ -405,7 +410,14 @@ fn create_multicam_from_clips_selected_in_the_timeline() {
     assert_eq!(clips.len(), 4);
     d.exec("project.select", json!({"items": []}));
     d.exec("timeline.select", json!({"clips": clips}));
-    d.ok("ui.menu.invoke", json!({"id": "clip.createMulticam"}));
+    // Timeline context explicitly wins over stale project-panel selection.
+    d.exec("project.select", json!({"items": [items[0]]}));
+    d.ok("ui.set", json!({"timeline":{"fit":true}}));
+    d.frames(5);
+    d.ok("ui.click", json!({"id":format!("timeline.clip.{}", clips[0]), "button":"right"}));
+    d.frames(3);
+    assert!(!d.ids("timeline.clipMenu.clip.synchronize").is_empty());
+    d.click("timeline.clipMenu.clip.createMulticam");
     d.frames(3);
     assert_eq!(d.app().ui.sync_dialog.as_ref().map(|x| x.items.clone()), Some(items.clone()), "the dialog takes the Timeline clips' media");
     d.click("mcam.method.in");

@@ -2065,13 +2065,14 @@ pub(crate) const CLIP_MENU: &[&[(&str, &str)]] = &[
         ("Ripple Delete", "edit.rippleDelete"),
     ],
     &[("Edit Original", "edit.editOriginal"), ("Replace With Clip From Source Monitor", "clip.replaceFromSource")],
-    &[("Remove Silence…", "audioCleanup.openSilence"), ("Remove Duplicate Takes…", "audioCleanup.openDuplicates")],
+    &[("Remove Silence…", "audioCleanup.openSilence"), ("Remove Duplicate Takes…", "audioCleanup.openDuplicates"), ("Beat Edit", "voice.autoEdit")],
     &[
         ("Enable", "clip.enable"),
         ("Link", "clip.link"),
         ("Group", "clip.group"),
         ("Ungroup", "clip.ungroup"),
         ("Synchronize…", "clip.synchronize"),
+        ("Create Multi-Camera Source Sequence…", "clip.createMulticam"),
         ("Merge Clips…", "clip.mergeClips"),
         ("Nest…", "clip.nest"),
         ("Make Subsequence", "sequence.makeSubsequence"),
@@ -2990,7 +2991,8 @@ fn interact(app: &mut FilmcraftApp, ui: &mut egui::Ui, seq: &Sequence, layout: &
                     let r = ui.add_enabled(!sel.is_empty() && (cmd.starts_with("audioCleanup.open") || app.session.is_enabled(cmd)), egui::Button::new(label));
                     app.auto.add(&format!("timeline.clipMenu.{cmd}"), r.rect, label);
                     if r.clicked() {
-                        match crate::menus::invoke(app, &ctx, cmd, json!({})) {
+                        let params = if cmd == "clip.createMulticam" { json!({"fromTimeline":true}) } else { json!({}) };
+                        match crate::menus::invoke(app, &ctx, cmd, params) {
                             // Unlink (#220): the clips were selected together because they were linked;
                             // keep only the one right-clicked, so it can be dragged away from the others
                             Ok(v) if cmd == "clip.link" && v["linked"] == json!(false) => {

@@ -250,7 +250,18 @@ pub fn track_overlay(track: &CaptionTrack, t: Tick, w: usize, h: usize) -> Optio
         return None;
     }
     let c = track.caption_at(t)?;
-    render_caption(c, &track.style, w, h)
+    let progress = ((t - c.start).0 as f64 / filmcraft_time::TICKS_PER_SECOND as f64 / 0.12).clamp(0.0, 1.0) as f32;
+    let mut style = track.style.clone();
+    if c.settings.split_whitespace().any(|s| s == "smotri-animation:pop") {
+        style.size *= 0.82 + 0.18 * (1.0 - (1.0 - progress).powi(3));
+    }
+    let mut image = render_caption(c, &style, w, h)?;
+    if c.settings.split_whitespace().any(|s| s == "smotri-animation:fade") {
+        for value in &mut image.px {
+            *value *= progress;
+        }
+    }
+    Some(image)
 }
 
 /// Overlays of every visible caption track of a sequence at `t`, bottom track first.
@@ -384,5 +395,23 @@ mod tests {
         assert!(track_overlay(&t, Tick(5), 100, 100).is_some());
         t.enabled = false;
         assert!(track_overlay(&t, Tick(5), 100, 100).is_none());
+    }
+    #[test]
+    fn word_animation_is_burned_and_normal_captions_are_unchanged() {
+        let mut track = CaptionTrack::new(TrackId(1), "Words".into(), CaptionFormat::Subtitle);
+        let mut caption = cap("Hello");
+        caption.start = Tick::ZERO;
+        caption.duration = Tick(filmcraft_time::TICKS_PER_SECOND);
+        track.captions.push(caption);
+        let plain = track_overlay(&track, Tick::ZERO, 320, 568).unwrap();
+        track.captions[0].settings = "smotri-animation:fade".into();
+        let start = track_overlay(&track, Tick::ZERO, 320, 568).unwrap();
+        assert!(start.px.iter().all(|v| *v == 0.));
+        let full = track_overlay(&track, Tick(filmcraft_time::TICKS_PER_SECOND / 2), 320, 568).unwrap();
+        assert_eq!(full, plain);
+        track.captions[0].settings = "smotri-animation:pop".into();
+        assert_ne!(track_overlay(&track, Tick::ZERO, 320, 568).unwrap(), plain);
+        track.captions[0].settings = "unknown".into();
+        assert_eq!(track_overlay(&track, Tick::ZERO, 320, 568).unwrap(), plain);
     }
 }

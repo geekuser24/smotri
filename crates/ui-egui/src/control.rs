@@ -142,6 +142,16 @@ pub fn handle(app: &mut FilmcraftApp, ctx: &egui::Context, req: &ControlRequest)
             ok(serde_json::to_value(app.auto.query(prefix)).unwrap_or_default())
         }
         "ui.set" => {
+            // Secret-free panel state; credentials are accepted only by the password field.
+            if let Some(patch) = p.get("shorts") {
+                let mut value = serde_json::to_value(&app.shorts).unwrap_or_default();
+                merge(&mut value, patch);
+                match serde_json::from_value(value) {
+                    Ok(state) => app.shorts = state,
+                    Err(e) => return err(format!("bad shorts state: {e}")),
+                }
+            }
+
             // Text to Speech panel draft (voice, pitch, pace, text…), merged into the current one
             if let Some(patch) = p.get("tts") {
                 let mut cur = serde_json::to_value(&app.ui.tts).unwrap_or_default();
@@ -536,7 +546,9 @@ pub fn inspect(app: &FilmcraftApp, ctx: &egui::Context) -> Value {
             "nativeWindowFocused": app.native_window_focused, "effectiveWindowFocused": ctx.input(|input| input.focused)},
         "ui": app.ui,
         "inserts": app.inserts.inspect(),
+        "soundpad": app.soundpad.inspect(),
         "downloader": app.downloader.inspect(),
+        "shorts": serde_json::to_value(&app.shorts).unwrap_or_default(),
         "jarvis": {"active": app.jarvis.active, "ready": app.jarvis.ready, "speaking": app.jarvis.is_speaking(), "awaitingChoice": app.jarvis.awaiting_choice(), "feedback": app.jarvis.feedback},
         "sourcePlayback": {"playing": app.source_playback.clock.playing, "audioClock": app.source_playback.clock.audio_clock, "playhead": app.session.state.source_playhead.0},
         "playback": {"playing": app.playback.playing, "speed": app.playback.speed, "loop": app.playback.looping, "audioClock": app.playback.audio_clock, "dropped": app.playback.meter.counts().1, "shown": app.playback.meter.counts().0, "preroll": app.playback.preroll.is_some()},

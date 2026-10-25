@@ -157,9 +157,12 @@ impl Default for TrimPrefs {
 pub struct Preferences {
     /// File layout version ([`crate::settings::PREFS_VERSION`]); older files are migrated on load.
     pub version: u32,
+    pub easing_presets: Vec<filmcraft_project::easing::EasingPreset>,
     pub general: settings::GeneralPrefs,
     pub jarvis: settings::JarvisPrefs,
     pub inserts: settings::InsertsPrefs,
+    pub clipboard: settings::InsertsPrefs,
+    pub soundpad: settings::InsertsPrefs,
     pub downloader: settings::DownloaderPrefs,
     pub appearance: settings::AppearancePrefs,
     pub audio: AudioPrefs,
@@ -190,9 +193,12 @@ impl Default for Preferences {
     fn default() -> Self {
         Self {
             version: settings::PREFS_VERSION,
+            easing_presets: Vec::new(),
             general: Default::default(),
             jarvis: Default::default(),
             inserts: Default::default(),
+            clipboard: Default::default(),
+            soundpad: Default::default(),
             downloader: Default::default(),
             appearance: Default::default(),
             audio: Default::default(),

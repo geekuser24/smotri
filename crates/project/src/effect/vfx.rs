@@ -651,6 +651,7 @@ pub(super) fn defs() -> Vec<EffectDef> {
                 ch("aspect", "Target Aspect", &["Sequence", "Vertical 9:16", "Square 1:1", "Vertical 4:5", "Horizontal 16:9"], 0),
             ],
         ),
+        super::shaker::definition(),
         video(
             "camera_shake",
             "Camera Shake",
@@ -1261,10 +1262,10 @@ mod tests {
         }
         assert_eq!(n, 93);
         assert_eq!(CATALOGUE.len(), 16);
-        // nothing else sits in the current folders
+        // Shaker is a Smotri addition to the upstream catalogue.
         for d in effect_defs().iter().filter(|d| d.kind == EffectKind::Video && d.category.first() == Some(&"Video Effects")) {
             let f = d.category[1];
-            if f == "Obsolete" {
+            if f == "Obsolete" || d.id == "shaker" {
                 continue;
             }
             let listed = CATALOGUE.iter().any(|(cf, names)| *cf == f && names.contains(&d.name));

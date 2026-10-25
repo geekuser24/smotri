@@ -558,6 +558,9 @@ pub(crate) fn param_row(
     };
     let (r, row) = ui.allocate_exact_size(vec2(body.width(), ROW_H), if mask.is_none() { Sense::click() } else { Sense::hover() });
     row_line(ui, r, lane, &t);
+    if e.effect == "shaker" && pd.id == "trigger" {
+        row.clone().on_hover_text(tl!("Each Hit Trigger key starts a new shake. No keys means no shake in Hit Mode."));
+    }
     // clicking one of an effect's properties selects the effect, as clicking its header does
     if row.clicked() {
         actions.push(("effects.select".into(), json!({"clip": clip.0, "effect": idx})));
@@ -755,6 +758,7 @@ fn keyframe_menu(app: &mut FilmcraftApp, ui: &mut egui::Ui, target: KeyframeRef,
         }
     }
     ui.separator();
+    crate::panels::graphs::context_menu(app, ui, &target, actions);
     let response = ui.button(tl!("Clear"));
     app.auto.add("effectControls.keyframeMenu.clear", response.rect, "Clear");
     if response.clicked() {
@@ -1047,7 +1051,7 @@ pub(crate) fn run(app: &mut FilmcraftApp, ctx: &egui::Context, actions: Vec<(Str
             p["begin"] = json!(begun != press && !wrote);
             wrote = true;
         }
-        if let Err(e) = app.session.execute(&cmd, p) {
+        if let Err(e) = crate::menus::invoke(app, ctx, &cmd, p) {
             app.ui.status = e.to_string();
         }
     }
@@ -1217,7 +1221,10 @@ pub(crate) fn graph_rows(
             app.auto.add(&auto_id, r, "keyframe value");
             // influence handles: flat (ease) tangents with length ∝ influence × neighbouring segment;
             // a point's sit on its X curve only, as both coordinates share the influence
-            let (eases_out, eases_in) = (ci == 0 && eases_out, ci == 0 && eases_in);
+            let (eases_out, eases_in) = (
+                ci == 0 && eases_out && k.easing.is_none(),
+                ci == 0 && eases_in && i.checked_sub(1).and_then(|j| ks.get(j)).is_none_or(|p| p.easing.is_none()),
+            );
             for (side, on, nb) in [(1.0f32, eases_out, ks.get(i + 1)), (-1.0f32, eases_in && i > 0, if i > 0 { ks.get(i - 1) } else { None })] {
                 let (true, Some(nb)) = (on, nb) else { continue };
                 let seg = (x_of(to_f(nb.time)) - c.x).abs();

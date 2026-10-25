@@ -48,9 +48,22 @@ fn choice(text: &str) -> Option<usize> {
         "1" | "e1" | "е1" | "e 1" | "е 1" | "один" | "первый" | "one" | "first" | "ударный" | "ударный шейк" | "hit" | "hit shake" => {
             Some(0)
         }
-        "2" | "e2" | "е2" | "e 2" | "е 2" | "два" | "второй" | "two" | "second" | "edt" | "эдт" | "эдит" | "со вспышкой" | "edt со вспышкой" => {
-            Some(1)
-        }
+        "2"
+        | "e2"
+        | "е2"
+        | "e 2"
+        | "е 2"
+        | "два"
+        | "второй"
+        | "two"
+        | "second"
+        | "edit"
+        | "edt"
+        | "эдт"
+        | "эдит"
+        | "со вспышкой"
+        | "edit со вспышкой"
+        | "edt со вспышкой" => Some(1),
         "3" | "e3" | "е3" | "e 3" | "е 3" | "три" | "третий" | "three" | "third" | "живой" | "живая" | "с рук" | "handheld" | "тряска камеры" => {
             Some(2)
         }
@@ -101,11 +114,11 @@ pub(super) fn ask_shake(app: &mut FilmcraftApp, intent: &Intent) -> Result<serde
     filmcraft_engine::voice_edit::targets(&app.session, &intent.params, true).map_err(|e| e.to_string())?;
     let russian = i18n::current() == i18n::Language::Ru;
     let prompt = if russian {
-        "Какую тряску добавить? 1 — ударный шейк; 2 — EDT со вспышкой; 3 — живая камера с рук. Назови номер или название."
+        "Какую тряску добавить? 1 — ударный шейк; 2 — EDIT со вспышкой; 3 — живая камера с рук. Назови номер или название."
     } else {
-        "Which shake? 1: hit shake. 2: EDT with flash. 3: handheld camera. Say the number or name."
+        "Which shake? 1: hit shake. 2: EDIT with flash. 3: handheld camera. Say the number or name."
     };
-    let choices = ["hit", "edt", "handheld"]
+    let choices = ["hit", "edit", "handheld"]
         .into_iter()
         .map(|preset| {
             let mut params = intent.params.clone();
@@ -253,7 +266,7 @@ mod tests {
     fn bounded_replies_require_a_pending_question() {
         let mut j = Jarvis { active: true, ..Default::default() };
         assert!(reply(&mut j, "two", Instant::now()).is_none());
-        for phrase in ["2", "два", "второй", "Jarvis, EDT", "option two", "Джарвис, со вспышкой", "давай второй", "выбери вариант два пожалуйста", "E2"]
+        for phrase in ["2", "два", "второй", "Jarvis, EDIT", "option two", "Джарвис, со вспышкой", "давай второй", "выбери вариант два пожалуйста", "E2"]
         {
             j.pending = Some(pending());
             assert_eq!(reply(&mut j, phrase, Instant::now()).flatten().unwrap().params, json!({"choice":1}));

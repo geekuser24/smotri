@@ -67,7 +67,8 @@ fn effects_list_reports_folders_and_badges() {
     assert_eq!(find("lens_flare")["folder"], "Lights & Glows");
     let n =
         arr.iter().filter(|e| e["kind"] == "Video" && e["category"][0] == "Video Effects" && e["folder"] != "Obsolete" && e["folder"] != Value::Null).count();
-    assert_eq!(n, 93, "Premiere 26's current Video Effects");
+    assert_eq!(n, 94, "93 catalogue effects plus Smotri Shaker");
+    assert_eq!(find("shaker")["folder"], "Transform");
 }
 
 #[test]
@@ -151,4 +152,39 @@ fn set_param_refuses_values_outside_the_range() {
     s.execute("effects.setParam", json!({"clip": clip, "effect": "levels", "param": "gamma", "value": 110})).unwrap();
     s.execute("effects.setParam", json!({"clip": clip, "effect": "opacity", "param": "opacity", "value": 100})).unwrap();
     s.execute("effects.setParam", json!({"clip": clip, "effect": "opacity", "param": "opacity", "value": 0})).unwrap();
+}
+
+#[test]
+fn shaker_presets_keys_roundtrip_and_undo() {
+    let mut s = demo();
+    let c = s.active_sequence().unwrap().video_tracks[0].items[0].clone();
+    s.execute("timeline.select", json!({"clips":[c.id],"linked":false})).unwrap();
+    s.execute("effects.apply", json!({"effect":"shaker"})).unwrap();
+    s.execute("playhead.set", json!({"time":c.start.0})).unwrap();
+    let before = s.project.clone();
+    let undo = s.history.undo.len();
+    s.execute("voice.shakerHit", json!({})).unwrap();
+    assert_eq!(s.history.undo.len(), undo + 1);
+    let fx = || s.active_sequence().unwrap().find_item(c.id).unwrap().1.effects.iter().find(|e| e.effect == "shaker").unwrap().clone();
+    let hit = fx();
+    assert_eq!(hit.params["hit_mode"].value, filmcraft_project::ParamValue::Bool(true));
+    assert_eq!(hit.params["trigger"].keyframes.len(), 1);
+    assert_eq!(hit.params["trigger"].keyframes[0].time, c.effect_time_at(c.start));
+    s.execute("edit.undo", json!({})).unwrap();
+    assert_eq!(s.project, before);
+    s.execute("edit.redo", json!({})).unwrap();
+    s.execute("effects.setParam", json!({"clip":c.id,"effect":"shaker","param":"preset","value":"EDIT Flash"})).unwrap();
+    let e = s.active_sequence().unwrap().find_item(c.id).unwrap().1.effects.iter().find(|e| e.effect == "shaker").unwrap();
+    assert_eq!(e.params["flash"].value.as_f64(), Some(55.));
+    assert_eq!(e.params["trigger"].keyframes, hit.params["trigger"].keyframes);
+    let copy: filmcraft_project::EffectInstance = serde_json::from_str(&serde_json::to_string(e).unwrap()).unwrap();
+    assert_eq!(&copy, e);
+    let before = s.project.clone();
+    for p in [json!({"param":"preset","value":99}), json!({"param":"duration","value":-1}), json!({"param":"amount","value":1e200})] {
+        let mut p = p;
+        p["clip"] = json!(c.id);
+        p["effect"] = json!("shaker");
+        assert!(s.execute("effects.setParam", p).is_err());
+        assert_eq!(s.project, before);
+    }
 }

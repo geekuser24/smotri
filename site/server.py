@@ -88,7 +88,7 @@ def catalog():
     cfg = config()
     return {'bot': cfg['bot_username'], 'channel': cfg['channel_url'], 'youtube': 'https://www.youtube.com/@akt.mp4',
             'items': [{**{k: i.get(k, '') for k in ('id', 'name', 'description', 'category', 'cover', 'format', 'video')}, 'available': bool(i.get('file') or i.get('url'))} for i in cfg['catalog']],
-            'releases': [{**{k: i.get(k, '') for k in ('id', 'name', 'video')}, 'available': bool(i.get('file') or i.get('url'))} for i in cfg.get('releases', [])]}
+            'releases': [{**{k: i.get(k, '') for k in ('id', 'name', 'video', 'version', 'channel')}, 'available': bool(i.get('file') or i.get('url'))} for i in cfg.get('releases', [])]}
 
 @app.get('/api/session')
 def current_session(request: Request):
@@ -196,6 +196,12 @@ def robots():
 
 @app.get('/sitemap.xml')
 def sitemap():
-    return Response('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://smotri.cc/</loc></url></urlset>', media_type='application/xml')
+    return Response('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://smotri.cc/</loc></url><url><loc>https://smotri.cc/packs</loc></url><url><loc>https://smotri.cc/plugins</loc></url><url><loc>https://smotri.cc/guides</loc></url><url><loc>https://smotri.cc/links</loc></url></urlset>', media_type='application/xml')
+
+@app.api_route('/{page}', methods=['GET', 'HEAD'])
+def section_page(page: str):
+    if page not in ('packs', 'plugins', 'guides', 'links'):
+        raise HTTPException(404, 'Страница не найдена.')
+    return FileResponse(ROOT / 'static' / (page + '.html'))
 
 app.mount('/static', StaticFiles(directory=ROOT / 'static'), name='static')

@@ -283,14 +283,17 @@ fn apply(s: &mut Session, p: &Pending, o: Output) -> Result<()> {
                     // Existing framing/effects are preserved; accents are separate effects.
                     let strong = window[0].1 >= 2.0;
                     if index % 4 == 0 || strong && index % 2 == 0 {
-                        pulse(&mut c, "camera_shake", "amount", if strong { 24. } else { 10. }, 0., 240)?;
-                        if let Some(e) = c.effects.iter_mut().find(|e| e.effect == "camera_shake") {
-                            for (k, v) in [("seed", (index * 7919 % 10000) as f64), ("frequency", 12.), ("zoom", 3.), ("rotation", 0.)] {
-                                if let Some(p) = e.params.get_mut(k) {
-                                    p.value = ParamValue::Float(v);
-                                }
-                            }
+                        let mut e = filmcraft_project::effect::shaker::instance(
+                            if strong { 1 } else { 0 },
+                            true,
+                            c.effect_time_at(c.start),
+                            (index * 7919 % 10000) as u32,
+                        )
+                        .ok_or_else(|| err("Shaker unavailable"))?;
+                        if let Some(p) = e.params.get_mut("strength") {
+                            p.value = ParamValue::Float(if strong { 60. } else { 25. });
                         }
+                        c.effects.insert(0, e);
                     }
                     // A separate Transform keeps the user's Motion scale intact.
                     if index % 2 == 0 {

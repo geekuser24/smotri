@@ -3172,6 +3172,14 @@ fn build() -> Vec<CommandSpec> {
                         };
                         (keyframes, v)
                     };
+                    if e.effect == "shaker" && pid == "preset" && pq.get("mask").is_none_or(Value::is_null) {
+                        let ParamValue::Choice(preset) = v else {
+                            return Err(bad("effects.setParam", "invalid Shaker preset"));
+                        };
+                        if !filmcraft_project::effect::shaker::apply_preset(e, preset) {
+                            return Err(bad("effects.setParam", "unknown Shaker preset"));
+                        }
+                    }
                     if e.effect == "ultra_key"
                         && pid == "setting"
                         && let ParamValue::Choice(setting) = v
@@ -3289,6 +3297,18 @@ fn build() -> Vec<CommandSpec> {
             has_seq,
             |s, p| keyframe_op(s, p, "move")
         ),
+        cmd!(
+            "effects.applyEasing",
+            "Apply Easing",
+            [],
+            None,
+            r#"{"keyframes":[{clip,effect,param,mask?,time}],"curve":[x1,y1,x2,y2]}"#,
+            has_seq,
+            crate::easing::apply
+        ),
+        cmd!("easing.list", "Easing Presets", [], None, "{}", always, crate::easing::list),
+        cmd!("easing.save", "Save Easing Preset", [], None, r#"{"name":str,"curve":[x1,y1,x2,y2]}"#, always, crate::easing::save),
+        cmd!("easing.delete", "Delete Easing Preset", [], None, r#"{"name":str}"#, always, crate::easing::delete),
         cmd!(
             "effects.moveKeyframes",
             "Move Keyframes",
@@ -3504,6 +3524,7 @@ fn build() -> Vec<CommandSpec> {
     ];
     crate::sequence_tools::splice(&mut v);
     v.extend(crate::captions::commands());
+    v.extend(crate::shorts::commands());
     v.extend(crate::settings::commands());
     v.extend(crate::mixer::commands());
     v.extend(crate::multicam::commands());
@@ -3630,6 +3651,7 @@ fn keyframe_op(s: &mut Session, p: &Value, op: &str) -> Result<Value> {
                 }
                 if let Some(x) = f64_p(p, "outInfluence") {
                     k.out_influence = x.clamp(0.01, 1.0);
+                    k.easing = None;
                 }
             }
             _ => {
@@ -3645,6 +3667,7 @@ fn keyframe_op(s: &mut Session, p: &Value, op: &str) -> Result<Value> {
                 };
                 let k = prm.keyframes.iter_mut().find(|k| k.time == at).ok_or_else(|| bad("keyframe", "no keyframe at that time"))?;
                 k.interp = kind;
+                k.easing = None;
             }
         }
         Ok(())

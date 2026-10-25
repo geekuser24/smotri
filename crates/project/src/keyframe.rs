@@ -152,6 +152,9 @@ pub struct Keyframe {
     pub out_influence: f64,
     #[serde(default = "default_influence")]
     pub in_influence: f64,
+    /// Normalized time/value curve for the segment starting at this key.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub easing: Option<crate::easing::EasingCurve>,
 }
 
 fn default_influence() -> f64 {
@@ -160,7 +163,7 @@ fn default_influence() -> f64 {
 
 impl Keyframe {
     pub fn new(time: Tick, value: ParamValue) -> Self {
-        Self { time, value, interp: Interpolation::Linear, out_influence: default_influence(), in_influence: default_influence() }
+        Self { time, value, interp: Interpolation::Linear, out_influence: default_influence(), in_influence: default_influence(), easing: None }
     }
 }
 
@@ -328,6 +331,9 @@ impl Param {
 
 /// Temporal easing for u∈[0,1] between two keyframes (1D cubic Bezier in time/value space).
 fn ease(a: &Keyframe, b: &Keyframe, u: f64) -> f64 {
+    if let Some(curve) = a.easing.filter(|c| c.valid()) {
+        return curve.sample(u);
+    }
     let out_ease = matches!(a.interp, Interpolation::Bezier | Interpolation::AutoBezier | Interpolation::ContinuousBezier | Interpolation::EaseOut);
     let in_ease = matches!(b.interp, Interpolation::Bezier | Interpolation::AutoBezier | Interpolation::ContinuousBezier | Interpolation::EaseIn)
         || matches!(a.interp, Interpolation::Bezier | Interpolation::ContinuousBezier);

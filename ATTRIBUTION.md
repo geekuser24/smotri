@@ -90,6 +90,7 @@ is traced or derived from Adobe artwork.
 
 | Asset | Where |
 |---|---|
+| Easing curve previews and editor | `crates/ui-egui/src/panels/graphs.rs` and `crates/project/src/easing.rs`: original procedural geometry and editable cubic approximations by Smotri contributors, MIT OR Apache-2.0; no third-party artwork or presets |
 | UI icons (tools, transport, panels, header) | `crates/ui-egui/src/icons.rs`: vector paths on a 16×16 grid |
 | Source and Program range braces and trim hover cues | `crates/ui-egui/src/panels/monitor.rs` and `source_range.rs`: original generic vector shapes by FilmCraft contributors, MIT OR Apache-2.0; no third-party artwork |
 | Align / distribute / paragraph-alignment glyphs in the graphics panel | `crates/ui-egui/src/panels/graphics.rs` (`align_glyph`): bars and lines drawn with the egui painter |
@@ -143,7 +144,7 @@ SHA-256 (`crates/speech/src/models.rs`, `docs/transcripts.md`).
 | File | Author | Source | Licence |
 |---|---|---|---|
 | `assets/app-icon/filmcraft-1024.png` | AKT.MP4 / Smotri contributors | Original work, generated eyes mark | MIT OR Apache-2.0 |
-| `assets/app-icon/filmcraft-macos-512.png` | AKT.MP4 / Smotri contributors | Original work, generated eyes mark | MIT OR Apache-2.0 |
+| `assets/app-icon/filmcraft-macos-512.png` | AKT.MP4 / Smotri contributors | Original work, eyes mark with rounded macOS tile and transparent inset | MIT OR Apache-2.0 |
 | `apps/filmcraft-web/web/favicon.png` | AKT.MP4 / Smotri contributors | Original work, generated eyes mark | MIT OR Apache-2.0 |
 | `assets/app-icon/hicolor/16x16/apps/ai.storyteller.filmcraft.png` | AKT.MP4 / Smotri contributors | Original work, generated eyes mark | MIT OR Apache-2.0 |
 | `assets/app-icon/hicolor/64x64/apps/ai.storyteller.filmcraft.png` | AKT.MP4 / Smotri contributors | Original work, generated eyes mark | MIT OR Apache-2.0 |
@@ -154,10 +155,30 @@ SHA-256 (`crates/speech/src/models.rs`, `docs/transcripts.md`).
 | `assets/app-icon/hicolor/48x48/apps/ai.storyteller.filmcraft.png` | AKT.MP4 / Smotri contributors | Original work, generated eyes mark | MIT OR Apache-2.0 |
 | `assets/app-icon/hicolor/512x512/apps/ai.storyteller.filmcraft.png` | AKT.MP4 / Smotri contributors | Original work, generated eyes mark | MIT OR Apache-2.0 |
 | `assets/app-icon/filmcraft.ico` | AKT.MP4 / Smotri contributors | Original work, generated eyes mark | MIT OR Apache-2.0 |
-| `assets/app-icon/filmcraft.icns` | AKT.MP4 / Smotri contributors | Original work, generated eyes mark | MIT OR Apache-2.0 |
-| `assets/smotri/Smotri.icns` | AKT.MP4 / Smotri contributors | Original work, generated eyes mark | MIT OR Apache-2.0 |
+| `assets/app-icon/filmcraft.icns` | AKT.MP4 / Smotri contributors | Original work, eyes mark with rounded macOS tile and transparent inset | MIT OR Apache-2.0 |
+| `assets/smotri/Smotri.icns` | AKT.MP4 / Smotri contributors | Original work, eyes mark with rounded macOS tile and transparent inset | MIT OR Apache-2.0 |
 | `assets/smotri/icon.png` | AKT.MP4 / Smotri contributors | Original work, generated eyes mark | MIT OR Apache-2.0 |
 | `site/static/apple-touch-icon.png` | AKT.MP4 / Smotri contributors | Original work, generated eyes mark | MIT OR Apache-2.0 |
 | `site/static/favicon.png` | AKT.MP4 / Smotri contributors | Original work, generated eyes mark | MIT OR Apache-2.0 |
 | `site/static/logo.png` | AKT.MP4 / Smotri contributors | Original work, generated eyes mark | MIT OR Apache-2.0 |
 | `site/static/eyes.svg` | AKT.MP4 / Smotri contributors | Original work, generated eyes mark | MIT OR Apache-2.0 |
+
+
+
+
+
+| `site/static/screens/editing.png` | FilmCraft assembly screenshot | FilmCraft contributors | `docs/images/filmcraft-assembly.png` | See source attribution sidecar |
+
+| `site/static/screens/color.png` | FilmCraft color screenshot | FilmCraft contributors | `docs/images/filmcraft-color.png` | See source attribution sidecar |
+
+| `site/static/screens/effects.png` | FilmCraft effects screenshot | FilmCraft contributors | `docs/images/filmcraft-effects.png` | See source attribution sidecar |
+
+| `site/static/screens/audio.png` | FilmCraft timeline screenshot | FilmCraft contributors | `docs/images/filmcraft-timeline.png` | See source attribution sidecar |
+
+### Website social profile icons (owner-requested brand links)
+
+- `site/static/social/youtube.png` — YouTube official website icon, https://www.youtube.com/s/desktop/dc0b62b0/img/favicon_144x144.png; trademark of YouTube, not covered by the project code license.
+- `site/static/social/telegram.svg` — Telegram official website icon, https://telegram.org/img/website_icon.svg?4; trademark of Telegram, not covered by the project code license.
+- `site/static/social/instagram.webp` — Instagram official website icon, https://static.cdninstagram.com/rsrc.php/yr/r/rzWiSjZRxk5.webp; trademark of Instagram, not covered by the project code license.
+- `site/static/social/tiktok.png` — TikTok official website icon, https://www.tiktok.com/favicon.ico; trademark of TikTok, not covered by the project code license.
+- `site/static/social/boosty.png` — Boosty official website icon, https://boosty.to/favicon.png?v=15; trademark of Boosty, not covered by the project code license.

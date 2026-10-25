@@ -85,6 +85,7 @@ impl Jarvis {
 
 mod dialogue;
 mod grammar;
+mod workflows;
 #[cfg(test)]
 use grammar::{COMMANDS, command};
 use grammar::{Intent, parse};
@@ -164,7 +165,7 @@ fn addressed(text: &str) -> Option<String> {
             rest = tail;
             continue;
         }
-        return matches!(first, "джарвис" | "джервис" | "жарвис" | "jarvis" | "jarves" | "джарвес").then(|| tail.to_string());
+        return matches!(first, "джарвис" | "джервис" | "жарвис" | "jarvis" | "jarves" | "джарвес" | "джавис" | "джарвиз").then(|| tail.to_string());
     }
     None
 }
@@ -238,6 +239,13 @@ pub fn tick(app: &mut FilmcraftApp, ctx: &egui::Context) {
                     break;
                 }
                 Some(Event::Transcript(text, at)) => {
+                    // External sound previews are untrusted audio, not editing instructions.
+                    // Keep stop available, but ignore other speech until the preview tail clears.
+                    if (app.soundpad.previewing || app.soundpad.preview_tail.is_some_and(|t| t.elapsed() < Duration::from_secs(3)))
+                        && !addressed(&text).and_then(|s| parse(&s)).is_some_and(|i| matches!(i.id, "soundpad.stop" | "jarvis.pause" | "jarvis.stop"))
+                    {
+                        continue;
+                    }
                     let previous_feedback = app.jarvis.feedback.clone();
                     if let Some(intent) = final_command(&mut app.jarvis, &text, at) {
                         app.jarvis.cancel_speech();
@@ -280,6 +288,20 @@ fn execute(app: &mut FilmcraftApp, ctx: &egui::Context, intent: &Intent) -> Resu
         return Err(i18n::t("Close the dialog before using editor voice commands").into());
     }
     match intent.id {
+        id if id.starts_with("jarvis.shorts")
+            || matches!(
+                id,
+                "jarvis.importGif"
+                    | "jarvis.cleanupSilence"
+                    | "jarvis.cleanupDuplicates"
+                    | "jarvis.keepTake"
+                    | "jarvis.previewTake"
+                    | "jarvis.soundNext"
+                    | "jarvis.soundPrevious"
+            ) =>
+        {
+            workflows::execute(app, id, &intent.params)
+        }
         "edit.rippleDelete" => app.session.execute("voice.rippleDelete", intent.params.clone()).map_err(|e| e.to_string()),
         "jarvis.askShake" => dialogue::ask_shake(app, intent),
         "jarvis.choose" => dialogue::apply_choice(app, ctx, intent),
@@ -313,6 +335,7 @@ fn execute(app: &mut FilmcraftApp, ctx: &egui::Context, intent: &Intent) -> Resu
         "jarvis.pause" => {
             app.stop();
             app.stop_source();
+            let _ = crate::soundpad::command(app, "soundpad.stop", serde_json::json!({}));
             Ok(serde_json::Value::Null)
         }
         id if id.starts_with("window.panel.") => {
@@ -367,17 +390,7 @@ pub fn settings_page(app: &mut FilmcraftApp, ui: &mut egui::Ui, values: &mut ser
     ui.add_space(12.0);
     ui.label("ElevenLabs · Scribe v2 Realtime");
     ui.add_space(12.0);
-    let configured = app.jarvis.host.as_ref().is_some_and(|h| h.has_key());
-    ui.label(i18n::t(if configured { "API key configured" } else { "API key not configured" }));
-    ui.label("ElevenLabs API key");
-    let hint = i18n::t(if configured { "Enter a new key to replace the saved key" } else { "Enter your ElevenLabs API key" });
-    let r = ui.add_enabled(!app.jarvis.active, egui::TextEdit::singleline(&mut app.jarvis.key).password(true).hint_text(hint).desired_width(420.0));
-    app.auto.add("jarvis.apiKey", r.rect, "ElevenLabs API key");
-    if app.jarvis.active {
-        ui.label(i18n::t("Turn Jarvis off before changing the API key"));
-    }
-    ui.label(i18n::t("Click OK to save the key. Cancel discards changes."));
-    ui.label(i18n::t("On macOS the key is stored in Keychain. Voice mode is always off at startup."));
+    shared_key_ui(app, ui);
     ui.add_space(12.0);
     ui.separator();
     ui.label(i18n::t("Use the Jarvis button in the header to turn voice control on or off."));
@@ -391,6 +404,16 @@ pub fn settings_page(app: &mut FilmcraftApp, ui: &mut egui::Ui, values: &mut ser
     let query = normalize(&app.jarvis.command_search);
     egui::ScrollArea::vertical().id_salt("jarvis.commands").max_height(200.0).show(ui, |ui| {
         for text in [
+            "добавь эффект шейкер • включи хит режим • поставь ключ удара • add shaker hit",
+            "пресет шейкера эдит • shaker preset handheld • выключи хит режим",
+            "найди звук удар • search sounds impact • послушай звук второй • preview sound two",
+            "добавь звук 2 на таймлайн • import sound 2 into project • останови звук",
+            "найди гифку кот • find gif cat • добавь гифку 1",
+            "проанализируй шортсы на 60 секунд • analyze shorts for 60 seconds",
+            "выбери шортс второй • покажи шортс 1 • выбери все шортсы • создай шортсы",
+            "шортсы с размытым фоном • шортсы сплит скрин • субтитры шортсов снизу",
+            "сделай версии шортсов 3 • экспортируй шортсы (папку выбери в панели)",
+            "проанализируй тишину • примени удаление тишины • проанализируй дубли",
             "выдели второй клип, потом уменьши его масштаб на 20 процентов, затем разрежь его пополам",
             "select second clip then reduce scale by twenty five percent then split it in half",
             "хочу на втором клипе сделать яркость поменьше на 20 процентов",
@@ -405,7 +428,7 @@ pub fn settings_page(app: &mut FilmcraftApp, ui: &mut egui::Ui, values: &mut ser
             "создай корректирующий слой • create adjustment layer",
             "добавь короткий шейк • добавь ударный шейк на сам клип",
             "добавь тряску камеры корректирующим слоем • add handheld shake as adjustment layer",
-            "добавь тряску камеры • add handheld shake • сделай шейк как в EDT • add EDT shake",
+            "добавь тряску камеры • add handheld shake • сделай шейк как в EDIT • add EDIT shake",
             "смени метод наложения на screen • set blend mode to screen",
             "сделай ниже на 20 • сделай 100% • сделай 10% (масштаб / scale)",
             "разрежь второй клип по центру • split second clip in half",
@@ -415,7 +438,7 @@ pub fn settings_page(app: &mut FilmcraftApp, ui: &mut egui::Ui, values: &mut ser
             "понизь яркость на 20 процентов • decrease brightness by 20 percent",
             "уменьши scale на 20 процентов • decrease scale by 20 percent",
             "выбери эффект camera shake • select effect camera shake",
-            "установи параметр frequency на 2 в эффекте camera shake • set parameter frequency to 2 in effect camera shake",
+            "установи параметр frequency на 2 в эффекте shaker • set parameter frequency to 2 in effect shaker",
             "расшифруй клип • transcribe clip • расшифруй таймлайн • transcribe timeline",
             "удали паузы учитывая все слои • remove pauses all layers",
             "удали паузы в голосе в клипе • remove pauses in clip voice only",
@@ -745,4 +768,95 @@ pub(crate) fn clarification_command(app: &mut FilmcraftApp, ctx: &egui::Context,
     let result = execute(app, ctx, &Intent { id, params });
     app.status(app.jarvis.feedback.clone());
     result
+}
+
+pub fn shared_key_ui(app: &mut FilmcraftApp, ui: &mut egui::Ui) {
+    let configured = app.jarvis.host.as_ref().is_some_and(|h| h.has_key());
+    ui.label(i18n::t(if configured { "API key configured" } else { "API key not configured" }));
+    ui.label("ElevenLabs API key");
+    let hint = i18n::t(if configured { "Enter a new key to replace the saved key" } else { "Enter your ElevenLabs API key" });
+    let r = ui.add_enabled(!app.jarvis.active, egui::TextEdit::singleline(&mut app.jarvis.key).password(true).hint_text(hint).desired_width(420.0));
+    app.auto.add("jarvis.apiKey", r.rect, "ElevenLabs API key");
+    if app.jarvis.active {
+        ui.label(i18n::t("Turn Jarvis off before changing the API key"));
+    }
+    ui.label(i18n::t("Click OK to save the key. Cancel discards changes."));
+    ui.label(i18n::t("On macOS the key is stored in Keychain. Voice mode is always off at startup."));
+}
+
+#[cfg(test)]
+mod soundpad_voice_tests {
+    use super::*;
+    use crate::soundpad::{Event as SoundEvent, Host, Sound};
+    use std::{
+        path::PathBuf,
+        sync::{Arc, Mutex},
+    };
+    struct HostSpy(Arc<Mutex<Vec<String>>>);
+    impl Host for HostSpy {
+        fn configured(&self) -> bool {
+            false
+        }
+        fn save_key(&mut self, _: &str) -> Result<(), String> {
+            Ok(())
+        }
+        fn search(&mut self, q: &str, _: u32) -> Result<(), String> {
+            self.0.lock().unwrap().push(format!("search:{q}"));
+            Ok(())
+        }
+        fn download(&mut self, s: &Sound, _: PathBuf) -> Result<(), String> {
+            self.0.lock().unwrap().push(format!("import:{}", s.id));
+            Ok(())
+        }
+        fn preview(&mut self, s: &Sound) -> Result<(), String> {
+            self.0.lock().unwrap().push(format!("preview:{}", s.id));
+            Ok(())
+        }
+        fn stop(&mut self) {
+            self.0.lock().unwrap().push("stop".into());
+        }
+        fn poll(&mut self) -> Option<SoundEvent> {
+            None
+        }
+    }
+    #[test]
+    fn spoken_sound_search_preview_import_routes_to_current_results() {
+        let log = Arc::new(Mutex::new(Vec::new()));
+        let mut app = FilmcraftApp::new(filmcraft_engine::Session::default());
+        app.soundpad.host = Some(Box::new(HostSpy(log.clone())));
+        let ctx = egui::Context::default();
+        execute(&mut app, &ctx, &parse("можешь пожалуйста найти звук удар").unwrap()).unwrap();
+        app.soundpad.results = vec![Sound { id: "a".into(), title: "A".into(), url: "https://www.myinstants.com/media/sounds/a.mp3".into() }];
+        execute(&mut app, &ctx, &parse("прослушай звук первый").unwrap()).unwrap();
+        execute(&mut app, &ctx, &parse("импортируй звук 1 в проект").unwrap()).unwrap();
+        assert_eq!(*log.lock().unwrap(), vec!["search:удар", "preview:a", "import:a"]);
+        let before = app.session.project.to_json();
+        assert!(parse("не добавляй звук 1").is_none());
+        assert!(parse("add sound 1 then delete everything").is_none());
+        assert!(execute(&mut app, &ctx, &parse("добавь звук 50").unwrap()).is_err());
+        assert_eq!(before, app.session.project.to_json());
+    }
+    #[test]
+    fn shorts_voice_settings_and_opening_preserve_original_project() {
+        let mut app = FilmcraftApp::new(filmcraft_engine::Session::default());
+        app.session.execute("file.openDemoProject", serde_json::json!({})).unwrap();
+        let before = app.session.project.to_json();
+        let ctx = egui::Context::default();
+        for s in [
+            "открой шортсы",
+            "шортсы сплит скрин",
+            "сделай версии шортсов 3",
+            "субтитры шортсов сверху",
+            "shorts captions fade",
+            "shorts source sequence first",
+        ] {
+            execute(&mut app, &ctx, &parse(s).unwrap()).unwrap();
+        }
+        assert_eq!(app.shorts.options.layout, "split");
+        assert_eq!(app.shorts.options.versions, 3);
+        assert_eq!(app.shorts.options.position, "top");
+        assert_eq!(app.shorts.options.animation, "fade");
+        assert!(execute(&mut app, &ctx, &parse("создай шортсы").unwrap()).is_err());
+        assert_eq!(before, app.session.project.to_json());
+    }
 }

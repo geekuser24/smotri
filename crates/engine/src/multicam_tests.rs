@@ -9,6 +9,7 @@
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::Arc;
 
 use filmcraft_media::DemoScene;
 use filmcraft_project::{ItemId, Marker, MarkerId, MarkerKind, MulticamAudio, Sequence, TrackItem};
@@ -920,4 +921,93 @@ fn multicam_menu_items_are_enabled_only_for_clips_they_work_on() {
     s.execute("clip.multicamFlatten", json!({"clips": [nest.0]})).unwrap();
     let q = s.active_sequence().unwrap();
     assert!(q.find_item(nest).is_none(), "flattened into the camera clips");
+}
+
+/// Own PCM fixtures: identical event on phase-inverted stereo channels, with a known delay.
+/// Several clips share one track before sync; an unrelated clip occupies another track.
+#[test]
+fn synchronize_channel_and_same_track_preserves_all_sources() {
+    let dir = tmp_dir("sync-channel-layers");
+    let sr = 48_000usize;
+    let lag = 12_345usize;
+    let mut rng = 17u64;
+    let signal: Vec<f32> = (0..sr * 5)
+        .map(|_| {
+            rng = rng.wrapping_mul(6364136223846793005).wrapping_add(1);
+            ((rng >> 40) as f32 / (1u32 << 24) as f32 - 0.5) * 0.6
+        })
+        .collect();
+    let files: Vec<_> = ["master.wav", "camera.wav", "other.wav"].map(|n| dir.join(n)).to_vec();
+    for (i, path) in files.iter().enumerate() {
+        let start = if i == 1 { lag } else { 0 };
+        let stereo: Vec<f32> = signal[start..start + sr * 3].iter().flat_map(|&x| [x, -x]).collect();
+        std::fs::write(path, filmcraft_media::wav::write_wav16(&stereo, 2, sr as u32)).unwrap();
+    }
+    let mut s = Session::default();
+    let items = import(&mut s, &files.iter().map(PathBuf::as_path).collect::<Vec<_>>());
+    let mut p = (*s.project).clone();
+    let rate = FrameRate::FPS_24;
+    let seq = p.new_sequence("Sync", Default::default(), 1, 2, None);
+    let mut ids = Vec::new();
+    for (item, seconds, track) in [(items[0], 0, 0), (items[1], 6, 0), (items[1], 12, 0), (items[2], 0, 1)] {
+        let range = filmcraft_time::TimeRange::new(Tick::ZERO, Tick(3 * TICKS_PER_SECOND));
+        let clip = p.make_track_item(item, filmcraft_project::TrackKind::Audio, Tick(seconds * TICKS_PER_SECOND), range, rate).unwrap();
+        ids.push(clip.id);
+        p.sequence_mut(seq).unwrap().audio_tracks[track].items.push(clip);
+    }
+    s.project = Arc::new(p);
+    s.state.active_sequence = Some(seq);
+    s.state.selection = ids[..3].to_vec();
+    let original = s.project.to_json();
+    let untouched = s.active_sequence().unwrap().find_item(ids[3]).unwrap().1.clone();
+    // A phase-cancelled mix is rejected, and invalid/missing channel selections are atomic.
+    for channel in [json!(0), json!(3), json!(-1), json!(33), json!(1.5), json!("1"), json!(u64::MAX)] {
+        assert!(s.execute("clip.synchronize", json!({"method":"audio","channel":channel})).is_err(), "{channel}");
+        assert_eq!(s.project.to_json(), original);
+    }
+    let result = s.execute("clip.synchronize", json!({"method":"audio","channel":1,"reference":ids[0].0})).unwrap();
+    assert_eq!(result["moved"], 2);
+    let q = s.active_sequence().unwrap();
+    assert_eq!(q.all_tracks().map(|t| t.items.len()).sum::<usize>(), 4);
+    assert_eq!(q.audio_tracks.len(), 4, "occupied layers are preserved and two free layers created");
+    assert_eq!(q.find_item(ids[3]).unwrap().1, &untouched);
+    for id in &ids[1..3] {
+        let c = q.find_item(*id).unwrap().1;
+        assert!(((c.start - c.source_in) - Tick::from_units(lag as i64, sr as i64)).abs() <= SAMPLE);
+        assert!(c.duration > Tick(2 * TICKS_PER_SECOND));
+    }
+    q.check().unwrap();
+    s.execute("edit.undo", json!({})).unwrap();
+    assert_eq!(s.project.to_json(), original);
+    s.execute("edit.redo", json!({})).unwrap();
+    assert_eq!(s.active_sequence().unwrap().audio_tracks.len(), 4);
+}
+
+#[test]
+fn synchronize_same_track_linked_video_audio_and_locks() {
+    let mut s = Session::default();
+    s.execute("file.openDemoProject", json!({})).unwrap();
+    let q = s.active_sequence().unwrap();
+    let a = q.video_tracks[0].items[0].id;
+    let b = q.video_tracks[0].items[1].id;
+    s.execute("timeline.select", json!({"clips":[a.0,b.0]})).unwrap();
+    let before = s.project.to_json();
+    let count = s.active_sequence().unwrap().all_tracks().map(|t| t.items.len()).sum::<usize>();
+    s.execute("clip.synchronize", json!({"method":"in"})).unwrap();
+    let q = s.active_sequence().unwrap();
+    assert_eq!(q.all_tracks().map(|t| t.items.len()).sum::<usize>(), count);
+    assert_eq!(q.find_item(a).unwrap().1.start, q.find_item(b).unwrap().1.start);
+    assert_ne!(q.find_item(a).unwrap().0, q.find_item(b).unwrap().0);
+    let b = q.find_item(b).unwrap().1;
+    for c in q.audio_tracks.iter().flat_map(|t| &t.items).filter(|c| c.link == b.link) {
+        assert_eq!(c.start, b.start);
+    }
+    q.check().unwrap();
+    s.execute("edit.undo", json!({})).unwrap();
+    assert_eq!(s.project.to_json(), before);
+    let seq = s.state.active_sequence.unwrap();
+    Arc::make_mut(&mut s.project).sequence_mut(seq).unwrap().audio_tracks[0].locked = true;
+    let locked = s.project.to_json();
+    assert!(s.execute("clip.synchronize", json!({"method":"in"})).is_err());
+    assert_eq!(s.project.to_json(), locked);
 }

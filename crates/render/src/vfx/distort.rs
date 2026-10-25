@@ -286,7 +286,7 @@ pub fn grow(img: &mut Image, e: &EffectInstance, cx: &FxCtx) {
 }
 
 /// Accumulate `n` renders of `f(img, k)` for k in −0.5..0.5 (simple motion blur).
-fn motion_blurred(img: &mut Image, n: usize, f: impl Fn(&mut Image, f64) + Sync) {
+pub(super) fn motion_blurred(img: &mut Image, n: usize, f: impl Fn(&mut Image, f64) + Sync) {
     if n <= 1 {
         f(img, 0.0);
         return;
