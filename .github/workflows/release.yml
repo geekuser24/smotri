@@ -88,6 +88,7 @@ jobs:
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
           for attempt in $(seq 1 120); do
+            echo "Checking source CI ($attempt/120)"
             state=$(gh run list --workflow ci.yml --commit "$GITHUB_SHA" --json status,conclusion --limit 1)
             if [ "$(echo "$state" | jq -r '.[0].status')" = completed ]; then
               test "$(echo "$state" | jq -r '.[0].conclusion')" = success || { echo 'Source CI failed; release not published'; exit 1; }
