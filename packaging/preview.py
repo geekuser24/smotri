@@ -3,8 +3,10 @@
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 import plistlib
+import re
 import shutil
 import subprocess
 import zipfile
@@ -14,10 +16,18 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--target', required=True)
     parser.add_argument('--platform', required=True)
-    parser.add_argument('--version', required=True)
+    parser.add_argument('--version')
     parser.add_argument('--sha', required=True)
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
+    package = re.search(r'(?ms)^\[workspace.package\].*?^version\s*=\s*"([0-9.]+)"', (root / 'Cargo.toml').read_text())
+    if package is None:
+        parser.error('workspace version is missing')
+    base_version = package.group(1)
+    ref = os.environ.get('GITHUB_REF_NAME', '')
+    args.version = args.version or (ref[len('smotri-v'):] if ref.startswith('smotri-v') else base_version + '-preview.' + args.sha[:8])
+    if not re.fullmatch(r'[0-9][A-Za-z0-9.-]{0,100}', args.version):
+        parser.error('invalid release version')
     binary = root / 'target' / args.target / 'release'
     stage = root / 'target' / 'preview-package' / args.platform
     if stage.exists():
@@ -34,7 +44,7 @@ def main():
         executable.parent.mkdir(parents=True)
         shutil.copy2(root / 'assets/smotri/Smotri.icns', resources / 'Smotri.icns')
         template = (root / 'packaging/macos/Info.plist.in').read_text()
-        template = template.replace('@VERSION@', args.version).replace('@SHORT_VERSION@', '0.12.0').replace('@BUILD_SHA@', args.sha)
+        template = template.replace('@VERSION@', args.version).replace('@SHORT_VERSION@', base_version).replace('@BUILD_SHA@', args.sha)
         plistlib.loads(template.encode())
         (app / 'Contents/Info.plist').write_text(template)
     else:

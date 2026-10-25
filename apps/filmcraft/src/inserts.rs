@@ -8,7 +8,9 @@ use std::{
     },
     time::Duration,
 };
+#[cfg(target_os = "macos")]
 const SERVICE: &str = "FilmCraft.Inserts.GIPHY";
+#[cfg(target_os = "macos")]
 const ACCOUNT: &str = "api-key";
 pub struct NativeInserts {
     key: String,

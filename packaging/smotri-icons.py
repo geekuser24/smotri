@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Build-time icon derivation. Requires Pillow; end users need no Python."""
 from pathlib import Path
+import base64
 from PIL import Image, ImageDraw
 
 
@@ -19,6 +20,12 @@ def macos_icon(source):
 
 
 root=Path(__file__).resolve().parents[1]
+# Freedesktop packages also require an SVG container. Embed the original Smotri
+# artwork unchanged, so the scalable fallback cannot resurrect the upstream mark.
+svg = root/'assets/app-icon/hicolor/scalable/apps/ai.storyteller.filmcraft.svg'
+svg.parent.mkdir(parents=True, exist_ok=True)
+encoded = base64.b64encode((root/'assets/smotri/icon.png').read_bytes()).decode('ascii')
+svg.write_text('<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1024" height="1024" viewBox="0 0 1024 1024"><image width="1024" height="1024" xlink:href="data:image/png;base64,' + encoded + '"/></svg>\n')
 with Image.open(root/'assets/smotri/icon.png') as source:
     image=source.convert('RGBA')
     for size in (16,24,32,48,64,128,256,512):

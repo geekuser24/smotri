@@ -1,0 +1,8 @@
+asset:        ai.storyteller.filmcraft.svg
+title:        Smotri eyes mark in a freedesktop SVG container
+author:       AKT.MP4 / Smotri contributors
+source:       original work; assets/smotri/icon.png
+license:      MIT OR Apache-2.0
+license-file: LICENSE-MIT; LICENSE-APACHE
+added:        2026-10-25 by Smotri contributors
+notes:        Embeds the original licensed PNG unchanged; a raster-backed SVG, not vector artwork.

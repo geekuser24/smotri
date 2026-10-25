@@ -45,7 +45,7 @@ jobs:
         shell: bash
         run: target/${{ matrix.target }}/release/filmcraft-cli --help
       - name: Package preview with version and checksums
-        run: python packaging/preview.py --target ${{ matrix.target }} --platform ${{ matrix.name }} --version 0.12.0-preview.20261025 --sha ${{ github.sha }}
+        run: python packaging/preview.py --target ${{ matrix.target }} --platform ${{ matrix.name }} --sha ${{ github.sha }}
       - uses: actions/upload-artifact@v4
         with:
           name: Smotri-${{ matrix.name }}-preview
@@ -75,6 +75,7 @@ jobs:
     runs-on: ubuntu-22.04
     permissions:
       contents: write
+      actions: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -86,4 +87,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
-          gh release create "$RELEASE_TAG" dist/downloads/* --verify-tag --prerelease --title "Smotri 0.12.0 · Preview 2026-10-25" --notes-file CHANGELOG-SMOTRI.md
+          for attempt in $(seq 1 120); do
+            state=$(gh run list --workflow ci.yml --commit "$GITHUB_SHA" --json status,conclusion --limit 1)
+            if [ "$(echo "$state" | jq -r '.[0].status')" = completed ]; then
+              test "$(echo "$state" | jq -r '.[0].conclusion')" = success || { echo 'Source CI failed; release not published'; exit 1; }
+              gh release create "$RELEASE_TAG" dist/downloads/* --verify-tag --prerelease --title "Smotri ${RELEASE_TAG#smotri-v}" --notes-file CHANGELOG-SMOTRI.md
+              exit 0
+            fi
+            sleep 30
+          done
+          echo 'Source CI did not finish; release not published'
+          exit 1

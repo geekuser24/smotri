@@ -9,6 +9,7 @@ use std::{
     },
     time::{Duration, Instant},
 };
+#[cfg(target_os = "macos")]
 const SERVICE: &str = "Smotri.SoundPad.MyInstants";
 pub struct NativeSoundPad {
     key: String,
@@ -20,11 +21,13 @@ pub struct NativeSoundPad {
 }
 impl NativeSoundPad {
     pub fn new() -> Self {
-        let mut key = std::env::var("MYINSTANTS_API_TOKEN").unwrap_or_default();
+        let key = std::env::var("MYINSTANTS_API_TOKEN").unwrap_or_default();
         #[cfg(target_os = "macos")]
-        if key.is_empty() && std::env::var_os("SMOTRI_NO_SAVED_CREDENTIALS").is_none() {
-            key = security_framework::passwords::get_generic_password(SERVICE, "api-key").ok().and_then(|v| String::from_utf8(v).ok()).unwrap_or_default();
-        }
+        let key = if key.is_empty() && std::env::var_os("SMOTRI_NO_SAVED_CREDENTIALS").is_none() {
+            security_framework::passwords::get_generic_password(SERVICE, "api-key").ok().and_then(|v| String::from_utf8(v).ok()).unwrap_or_default()
+        } else {
+            key
+        };
         Self { key, search: None, download: None, preview: None, cancel: Arc::new(AtomicBool::new(false)), last: None }
     }
 }

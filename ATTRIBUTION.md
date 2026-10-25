@@ -182,3 +182,5 @@ SHA-256 (`crates/speech/src/models.rs`, `docs/transcripts.md`).
 - `site/static/social/instagram.webp` — Instagram official website icon, https://static.cdninstagram.com/rsrc.php/yr/r/rzWiSjZRxk5.webp; trademark of Instagram, not covered by the project code license.
 - `site/static/social/tiktok.png` — TikTok official website icon, https://www.tiktok.com/favicon.ico; trademark of TikTok, not covered by the project code license.
 - `site/static/social/boosty.png` — Boosty official website icon, https://boosty.to/favicon.png?v=15; trademark of Boosty, not covered by the project code license.
+
+| `assets/app-icon/hicolor/scalable/apps/ai.storyteller.filmcraft.svg` | AKT.MP4 / Smotri contributors | Original Smotri PNG embedded unchanged in SVG | MIT OR Apache-2.0 |
