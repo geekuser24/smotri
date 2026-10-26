@@ -1,5 +1,9 @@
 # Изменения Smotri
 
+## 0.12.0 preview.20261026.6
+
+- Complete Linux ARM64 VST3 ABI compatibility for plugin class identifiers. Includes all timeline, effect clipboard and audio-plugin updates described below.
+
 ## 0.12.0 preview.20261026.5
 
 - Regular edge drags trim all selected clips together, including unlinked video/audio. Media handles and neighbours constrain the common delta; one Undo restores the group.

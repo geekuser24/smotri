@@ -16,6 +16,19 @@ fn status(result: tresult, operation: &str) -> Result<(), String> {
 fn text(bytes: &[std::ffi::c_char]) -> String {
     String::from_utf8_lossy(&bytes.iter().take_while(|b| **b != 0).map(|b| b.to_ne_bytes()[0]).collect::<Vec<_>>()).into_owned()
 }
+fn class_id(native_id: &str) -> Result<TUID, String> {
+    let raw = native_id.as_bytes();
+    if raw.len() != 32 {
+        return Err("Invalid VST3 class ID".into());
+    }
+    let mut id: TUID = [0; 16];
+    for (out, pair) in id.iter_mut().zip(raw.as_chunks::<2>().0) {
+        let pair = std::str::from_utf8(pair).map_err(|e| e.to_string())?;
+        *out = std::ffi::c_char::from_ne_bytes([u8::from_str_radix(pair, 16).map_err(|e| e.to_string())?]);
+    }
+    Ok(id)
+}
+
 fn wide(bytes: &[u16]) -> String {
     String::from_utf16_lossy(&bytes.iter().copied().take_while(|b| *b != 0).collect::<Vec<_>>())
 }
@@ -510,15 +523,7 @@ impl Processor {
             return Err("VST3 requires mono or stereo audio".into());
         }
 
-        let raw = state.plugin.native_id.as_bytes();
-        if raw.len() != 32 {
-            return Err("Invalid VST3 class ID".into());
-        }
-        let mut id = [0i8; 16];
-        for (out, pair) in id.iter_mut().zip(raw.as_chunks::<2>().0) {
-            let pair = std::str::from_utf8(pair).map_err(|e| e.to_string())?;
-            *out = u8::from_str_radix(pair, 16).map_err(|e| e.to_string())? as i8;
-        }
+        let id = class_id(&state.plugin.native_id)?;
         let mut p = Self::new(std::sync::Arc::new(Module::load(Path::new(&state.plugin.path))?), id, sr, channels)?;
         if !state.state.is_empty() {
             p.restore(&state.state)?;
@@ -679,7 +684,7 @@ pub fn scan(path: &str) -> Result<Vec<AudioPlugin>, String> {
         if text(&info.category) != "Audio Module Class" {
             continue;
         }
-        let id = info.cid.iter().map(|b| format!("{:02x}", *b as u8)).collect::<String>();
+        let id = info.cid.iter().map(|b| format!("{:02x}", b.to_ne_bytes()[0])).collect::<String>();
         // Each candidate is instantiated in this disposable scan worker to verify it is an effect.
         let processor = Processor::new(module.clone(), info.cid, 48000, 2).or_else(|_| Processor::new(module.clone(), info.cid, 48000, 1))?;
         let mut category = "Other".to_string();
@@ -729,6 +734,22 @@ mod tests {
             assert_eq!(s.seek(MAX_PLUGIN_STATE as i64, 0, ptr::null_mut()), kResultOk);
             let mut b = 0u8;
             assert_eq!(s.write((&mut b as *mut u8).cast(), 1, ptr::null_mut()), kOutOfMemory);
+        }
+    }
+}
+
+#[cfg(test)]
+mod abi_tests {
+    use super::*;
+    #[test]
+    fn class_id_keeps_all_bits_and_rejects_bad_input() {
+        let raw = "0080ff7f0123456789abcdef10203040";
+        let id = class_id(raw).unwrap();
+        let restored = id.iter().map(|b| format!("{:02x}", b.to_ne_bytes()[0])).collect::<String>();
+        assert_eq!(restored, raw);
+        assert_eq!(text(&[std::ffi::c_char::from_ne_bytes(*b"A"), 0]), "A");
+        for invalid in ["", "a", "z080ff7f0123456789abcdef10203040", "я080ff7f0123456789abcdef102030405"] {
+            assert!(class_id(invalid).is_err());
         }
     }
 }

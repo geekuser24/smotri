@@ -1,5 +1,6 @@
 //! Safe IPC client for isolated audio-plugin workers; never loads native libraries.
 #![cfg_attr(not(test), deny(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
+#[cfg(not(target_arch = "wasm32"))]
 use filmcraft_project::audio_plugin::{PluginRequest, PluginResponse};
 use std::io::{Read, Write};
 pub const MAX_PACKET: usize = 48 * 1024 * 1024;
