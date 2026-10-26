@@ -1082,3 +1082,91 @@ fn toggle_animation_creates_a_parameter_missing_from_an_older_instance() {
     let rot = it.effect("motion").unwrap().param("rotation").unwrap();
     assert!(rot.is_animated(), "the stopwatch is on");
 }
+
+#[test]
+fn effect_row_clipboard_pastes_only_selected_settings_to_many_and_undoes() {
+    let mut s = demo();
+    let clips = v1(&s);
+    let (a, b, c) = (clips[0].id.0, clips[1].id.0, clips[2].id.0);
+    s.execute("effects.setParam", json!({"clip": a, "effect": "motion", "param": "rotation", "value": 37.0})).unwrap();
+    s.execute("effects.setParam", json!({"clip": a, "effect": "opacity", "param": "opacity", "value": 25.0})).unwrap();
+    select(&mut s, &[a]);
+    s.execute("effects.select", json!({"clip": a, "effect": "motion"})).unwrap();
+    s.execute("effects.copy", json!({})).unwrap();
+    assert!(s.state.clipboard.is_empty());
+    select(&mut s, &[b, c]);
+    let before = (*s.project).clone();
+    let n = s.execute("edit.paste", json!({})).unwrap();
+    assert_eq!(n["clips"], 2);
+    for id in [b, c] {
+        assert_eq!(f64_param(&clip(&s, id), "motion", "rotation"), 37.0);
+        assert_eq!(f64_param(&clip(&s, id), "opacity", "opacity"), f64_param(clips.iter().find(|i| i.id.0 == id).unwrap(), "opacity", "opacity"));
+    }
+    s.execute("edit.undo", json!({})).unwrap();
+    assert_eq!(*s.project, before);
+    // A normal clip copy replaces the row clipboard, never pastes both.
+    s.execute("edit.copy", json!({})).unwrap();
+    assert!(s.state.effect_clipboard.is_none());
+}
+
+#[test]
+fn effect_row_paste_rejects_incompatible_or_locked_targets() {
+    let mut s = demo();
+    let a = v1(&s)[0].id.0;
+    select(&mut s, &[a]);
+    s.execute("effects.select", json!({"clip": a, "effect": "motion"})).unwrap();
+    s.execute("effects.copy", json!({})).unwrap();
+    let audio = s.active_sequence().unwrap().audio_tracks[1].items[0].id.0;
+    s.state.linked_selection = false;
+    select(&mut s, &[audio]);
+    let before = (*s.project).clone();
+    assert!(s.execute("edit.paste", json!({})).is_err());
+    assert_eq!(*s.project, before);
+    select(&mut s, &[a]);
+    s.execute("timeline.setTrack", json!({"track":"V1", "locked":true})).unwrap();
+    let before = (*s.project).clone();
+    assert!(s.execute("edit.paste", json!({})).is_err());
+    assert_eq!(*s.project, before);
+}
+
+#[test]
+fn copied_plugin_keeps_opaque_state_values_and_retimes_keys() {
+    use filmcraft_project::audio_plugin::{AudioPlugin, AudioPluginState, PluginFormat, PluginParameter, instance_state, register};
+    let mut s = demo();
+    s.state.linked_selection = false;
+    let audio = s.active_sequence().unwrap().audio_tracks[0].items.clone();
+    let (a, b) = (audio[0].clone(), audio[2].clone());
+    let state = AudioPluginState {
+        plugin: AudioPlugin {
+            format: PluginFormat::Vst3,
+            path: "/test/copied.vst3".into(),
+            native_id: "copy-row-test".into(),
+            name: "Copy test".into(),
+            vendor: "Tests".into(),
+            category: "Fx".into(),
+            parameters: vec![PluginParameter { id: "gain".into(), name: "Gain".into(), unit: "".into(), min: 0.0, max: 1.0, default: 0.5, steps: 0 }],
+        },
+        values: Default::default(),
+        state: vec![1, 3, 5, 7],
+    };
+    let mut effect = register(&state).unwrap().instance();
+    effect.param_mut("gain").unwrap().put_keyframe(a.source_in, filmcraft_project::ParamValue::Float(0.2));
+    effect.param_mut("gain").unwrap().put_keyframe(a.source_out(), filmcraft_project::ParamValue::Float(0.8));
+    let id = effect.effect.clone();
+    let mut p = (*s.project).clone();
+    p.sequence_mut(s.state.active_sequence.unwrap()).unwrap().find_item_mut(a.id).unwrap().1.effects.push(effect);
+    s.project = std::sync::Arc::new(p);
+    select(&mut s, &[a.id.0]);
+    s.execute("effects.select", json!({"clip":a.id.0,"effect":id})).unwrap();
+    s.execute("effects.copy", json!({})).unwrap();
+    select(&mut s, &[b.id.0]);
+    s.execute("edit.paste", json!({})).unwrap();
+    let target = clip(&s, b.id.0);
+    let pasted = target.effect(&id).unwrap();
+    assert_eq!(instance_state(pasted).unwrap().state, state.state);
+    let keys = &pasted.param("gain").unwrap().keyframes;
+    assert_eq!(keys.iter().map(|k| k.time).collect::<Vec<_>>(), vec![b.source_in, b.source_out()]);
+    assert_eq!(keys[0].value, filmcraft_project::ParamValue::Float(0.2));
+    let saved = serde_json::to_string(&s.project).unwrap();
+    assert!(saved.contains("copy-row-test"));
+}

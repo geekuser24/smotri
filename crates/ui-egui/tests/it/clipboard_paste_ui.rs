@@ -411,3 +411,24 @@ fn native_edit_menu_targets_search_and_restores_timeline_shortcuts_on_blur() {
     assert_eq!(d.clips().len(), count + 1, "first media paste after editing text is not swallowed");
     assert_eq!(asked.get(), 1);
 }
+
+#[test]
+fn effect_controls_copy_then_timeline_paste_changes_many_without_duplicating_clips() {
+    let mut d = Driver::demo("effect-row");
+    d.clipboard(Some(red_image)); // stale image must not win over a later effect copy
+    let ids: Vec<u64> = d.app().session.active_sequence().unwrap().video_tracks[0].items.iter().take(3).map(|c| c.id.0).collect();
+    d.app().session.execute("effects.setParam", json!({"clip":ids[0],"effect":"motion","param":"rotation","value":45.0})).unwrap();
+    d.app().session.execute("timeline.select", json!({"clips":[ids[0]]})).unwrap();
+    d.app().session.execute("effects.select", json!({"clip":ids[0],"effect":"motion"})).unwrap();
+    d.ok("ui.panel.show", json!({"panel":"EffectControls"}));
+    d.ok("ui.menu.invoke", json!({"id":"edit.copy"}));
+    d.app().session.execute("timeline.select", json!({"clips":[ids[1],ids[2]]})).unwrap();
+    d.ok("ui.panel.show", json!({"panel":"Timeline"}));
+    let before = d.clips();
+    d.ctrl_v_without_text(egui::Modifiers::CTRL);
+    assert_eq!(d.clips(), before, "effect paste must not insert a clip or stale image");
+    for id in &ids[1..] {
+        let item = d.app().session.active_sequence().unwrap().find_item(filmcraft_project::ClipId(*id)).unwrap().1;
+        assert_eq!(item.effect("motion").unwrap().f64_at("rotation", item.source_in), 45.0);
+    }
+}

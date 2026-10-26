@@ -128,7 +128,11 @@ pub(crate) fn has_project_selection(s: &Session) -> std::result::Result<(), Stri
 }
 fn has_clipboard(s: &Session) -> std::result::Result<(), String> {
     has_seq(s)?;
-    if s.state.clipboard.is_empty() && s.state.caption_clipboard.is_empty() { Err("clipboard is empty".into()) } else { Ok(()) }
+    if s.state.clipboard.is_empty() && s.state.caption_clipboard.is_empty() && s.state.effect_clipboard.is_none() {
+        Err("clipboard is empty".into())
+    } else {
+        Ok(())
+    }
 }
 
 /// The ids a caller named under `many` (a list) or `one` (a single id), when the command documents
@@ -600,6 +604,13 @@ pub fn with_links(s: &Session, clips: &[ClipId]) -> Vec<ClipId> {
     out
 }
 
+/// Regular edge drags trim the selected clips together, even without links. Explicit
+/// single-clip commands and ripple edits retain their existing linked-clip behavior.
+pub fn trim_targets(s: &Session, clip: ClipId, mode: TrimMode) -> Vec<ClipId> {
+    let selected = mode == TrimMode::Regular && s.state.selection.contains(&clip);
+    with_links(s, if selected { &s.state.selection } else { std::slice::from_ref(&clip) })
+}
+
 /// The delta a trim of `clips` (a clip and its linked partners) can apply together: `delta`
 /// clamped by each one's media and neighbours.
 fn clamp_trim_linked(q: &filmcraft_project::Sequence, clips: &[ClipId], edge: Edge, mode: TrimMode, delta: Tick, ctx: &edit::EditCtx) -> Result<Tick> {
@@ -632,7 +643,7 @@ pub fn trim_delta(s: &Session, clip: ClipId, edge: Edge, mode: TrimMode, delta: 
     let starts = |id: ItemId| crate::media_start(&s.project, id);
     let mut next = s.project.next_id;
     let ctx = edit::EditCtx { next_id: &mut next, media_duration: &durations, media_start: &starts, min_duration: q.settings.frame_rate.frame_duration() };
-    clamp_trim_linked(q, &with_links(s, &[clip]), edge, mode, delta, &ctx)
+    clamp_trim_linked(q, &trim_targets(s, clip, mode), edge, mode, delta, &ctx)
 }
 
 /// Sequence settings matching a media clip (New Sequence From Clip, New Sequence from an item):
@@ -906,7 +917,16 @@ fn place_one(s: &mut Session, p: &Value) -> Result<Value> {
     let end = rate.snap_nearest(Tick(at.0.saturating_add(dur.0)));
     let at = rate.snap_nearest(at);
     let dur = end - at;
-    let ids = place_item(s, item, TimeRange::new(sin, dur), at, v, a, bool_p(p, "insert").unwrap_or(false), "Place Clip", None)?;
+    let insert = bool_p(p, "insert").unwrap_or(false);
+    let ids = if bool_p(p, "freeTrack").unwrap_or(false) && !insert {
+        s.edit_group("Place Clip", |s| {
+            let v = if video && has_video { Some(crate::paste_media::free_track_from(s, TrackKind::Video, at, end, v)?) } else { None };
+            let a = if audio && has_audio { Some(crate::paste_media::free_track_from(s, TrackKind::Audio, at, end, a)?) } else { None };
+            place_item(s, item, TimeRange::new(sin, dur), at, v, a, false, "Place Clip", None)
+        })?
+    } else {
+        place_item(s, item, TimeRange::new(sin, dur), at, v, a, insert, "Place Clip", None)?
+    };
     Ok(json!({"clips": ids.iter().map(|c| c.0).collect::<Vec<_>>()}))
 }
 
@@ -2659,7 +2679,7 @@ fn build() -> Vec<CommandSpec> {
             "Place Clip",
             [],
             None,
-            r#"{"item":id|"items":[id] (back to back, one undo step),"track":"V1"|id|"A1" (sound only)|"new" (a video track after the last)?,"audioTrack":"A1"|id|"new"?,"time":ticks|"frame":i64|"seconds":f64,"insert":bool,"sourceIn":ticks?,"duration":ticks?,"video":bool=true,"audio":bool=true}"#,
+            r#"{"item":id|"items":[id] (back to back, one undo step),"track":"V1"|id|"A1" (sound only)|"new" (a video track after the last)?,"audioTrack":"A1"|id|"new"?,"time":ticks|"frame":i64|"seconds":f64,"insert":bool,"sourceIn":ticks?,"duration":ticks?,"video":bool=true,"audio":bool=true,"freeTrack":bool=false}"#,
             has_seq,
             |s, p| match p.get("items") {
                 Some(items) => place_items(s, p, items),
@@ -2714,7 +2734,7 @@ fn build() -> Vec<CommandSpec> {
             "Trim Edit",
             [],
             None,
-            r#"{"clip":id,"edge":"in|out","mode":"regular|ripple","delta":ticks|"deltaFrames":i64}"#,
+            r#"{"clip":id,"edge":"in|out","mode":"regular|ripple","selection":bool?,"delta":ticks|"deltaFrames":i64}"#,
             has_seq,
             |s, p| {
                 let c = clip_p(p, "clip").ok_or_else(|| bad("timeline.trim", "need `clip`"))?;
@@ -2726,7 +2746,7 @@ fn build() -> Vec<CommandSpec> {
                     .map(Tick)
                     .or_else(|| p.get("deltaFrames").and_then(Value::as_i64).map(|f| s.sequence_rate().tick_of(f)))
                     .unwrap_or_default();
-                let clips = with_links(s, &[c]);
+                let clips = if bool_p(p, "selection").unwrap_or(false) { trim_targets(s, c, mode) } else { with_links(s, &[c]) };
                 let applied = s.edit_sequence(if mode == TrimMode::Ripple { "Ripple Trim" } else { "Trim" }, |q, ctx, st| {
                     if q.find_item(c).is_some_and(|(t, _)| q.track(t).is_some_and(|tr| tr.locked)) {
                         return Err(edit::EditError::Locked.into());
@@ -3791,12 +3811,16 @@ fn copy_selection(s: &mut Session) {
             }
         }
     }
+    s.state.effect_clipboard = None;
     s.state.clipboard = clip;
     s.state.clipboard_markers = markers;
     s.state.caption_clipboard.clear();
 }
 
 fn paste(s: &mut Session, insert: bool) -> Result<Value> {
+    if s.state.effect_clipboard.is_some() {
+        return crate::clip_ops::paste_effect(s, &json!({}));
+    }
     if !s.state.caption_clipboard.is_empty() {
         return crate::captions::paste(s, insert);
     }

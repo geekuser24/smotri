@@ -282,3 +282,31 @@ fn trim_delta_stops_at_the_end_of_the_media() {
     let back = commands::trim_delta(&s, clip, filmcraft_edit::Edge::Out, filmcraft_edit::TrimMode::Regular, -small).unwrap();
     assert_eq!(back, -small, "a trim within the media is not clamped");
 }
+
+#[test]
+fn selected_unlinked_clips_trim_together_with_common_limit_and_single_undo() {
+    let mut s = demo();
+    s.state.linked_selection = false;
+    let all = v1(&s);
+    let (a, b) = (all[0], all[2]);
+    s.execute("timeline.select", json!({"clips":[a.0,b.0]})).unwrap();
+    let before = (*s.project).clone();
+    let delta = -s.sequence_rate().tick_of(10);
+    let shown = commands::trim_delta(&s, ClipId(a.0), filmcraft_edit::Edge::Out, filmcraft_edit::TrimMode::Regular, delta).unwrap();
+    let result = s.execute("timeline.trim", json!({"clip":a.0,"edge":"out","delta":delta.0,"selection":true})).unwrap();
+    assert_eq!(result["delta"], shown.0);
+    for old in [a, b] {
+        assert_eq!(s.active_sequence().unwrap().find_item(ClipId(old.0)).unwrap().1.end(), old.2 + shown);
+    }
+    // Extending back uses the same shared delta; neither overlaps its neighbour.
+    s.execute("timeline.trim", json!({"clip":a.0,"edge":"out","delta":-delta.0 * 100,"selection":true})).unwrap();
+    for old in [a, b] {
+        assert_eq!(s.active_sequence().unwrap().find_item(ClipId(old.0)).unwrap().1.end(), old.2);
+    }
+    s.execute("edit.undo", json!({})).unwrap();
+    s.execute("edit.undo", json!({})).unwrap();
+    assert_eq!(*s.project, before);
+    // An explicit one-clip command still edits just that clip.
+    s.execute("timeline.trim", json!({"clip":a.0,"edge":"out","delta":delta.0})).unwrap();
+    assert_eq!(s.active_sequence().unwrap().find_item(ClipId(b.0)).unwrap().1.end(), b.2);
+}

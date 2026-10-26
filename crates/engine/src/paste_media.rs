@@ -103,13 +103,21 @@ fn import_and_place(s: &mut Session, paths: &[String], bin: Option<BinId>, place
 /// The first unlocked track of `kind` from the targeted one outward with nothing in `start..end`.
 /// When every track is busy there, a new one is added (on top for video, at the bottom for audio).
 fn free_track(s: &mut Session, kind: TrackKind, start: Tick, end: Tick) -> Result<TrackId> {
+    free_track_from(s, kind, start, end, None)
+}
+
+/// Find a free track at or above/below the requested drop destination.
+pub(crate) fn free_track_from(s: &mut Session, kind: TrackKind, start: Tick, end: Tick, preferred: Option<TrackId>) -> Result<TrackId> {
+    if start < Tick::ZERO || end <= start {
+        return Err(EngineError::Other("Invalid placement range".into()));
+    }
     let seq = s.active_sequence().ok_or(EngineError::NoSequence)?;
     let tg = s.targeting();
     let (tracks, dest) = match kind {
         TrackKind::Video => (&seq.video_tracks, tg.video_dest),
         TrackKind::Audio => (&seq.audio_tracks, tg.audio_dest),
     };
-    let from = dest.and_then(|d| tracks.iter().position(|t| t.id == d)).unwrap_or(0);
+    let from = preferred.or(dest).and_then(|d| tracks.iter().position(|t| t.id == d)).unwrap_or(0);
     let free = tracks.iter().skip(from).find(|t| !t.locked && !t.items.iter().any(|i| i.start < end && i.end() > start)).map(|t| t.id);
     if let Some(t) = free {
         return Ok(t);

@@ -345,3 +345,15 @@ fn native_content_pointer_places_finder_drop_when_egui_has_no_pointer() {
         assert_eq!(clip_counts(&h), (1, 0), "{}", h.state().ui.status);
     }
 }
+
+#[test]
+fn repeated_external_drops_preserve_occupied_track_and_allocate_free_layer() {
+    let mut h = harness();
+    drop_on_row(&mut h, "timeline.track.V1.target", &still("free-layer-first.png"));
+    let before = h.state().session.active_sequence().unwrap().video_tracks[0].items.clone();
+    drop_on_row(&mut h, "timeline.track.V1.target", &still("free-layer-second.png"));
+    let q = h.state().session.active_sequence().unwrap();
+    assert_eq!(q.video_tracks[0].items, before, "drop cannot overwrite an existing clip");
+    assert_eq!(q.video_tracks.iter().map(|t| t.items.len()).sum::<usize>(), 2);
+    assert!(q.video_tracks.iter().skip(1).any(|t| !t.items.is_empty()));
+}

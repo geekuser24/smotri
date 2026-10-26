@@ -80,6 +80,8 @@ pub(crate) fn commands() -> Vec<CommandSpec> {
         spec("file.closeProject", "Close Project", &["File"], Some("Cmd+Shift+W"), r#"{"force":bool?}"#, always, close_project),
         spec("file.saveAll", "Save All", &["File"], None, "{}", always, |s, _| s.execute("file.save", json!({}))),
         // ---------------- Edit ----------------
+        spec("effects.copy", "Copy Effect", &[], None, "{}", has_selection, copy_effect),
+        spec("effects.paste", "Paste Effect", &[], None, r#"{"clips":[id]?,"scaleTimes":bool=true}"#, has_selection, paste_effect),
         spec(
             "edit.pasteAttributes",
             "Paste Attributes…",
@@ -1033,6 +1035,60 @@ fn is_standard(e: &filmcraft_project::EffectInstance) -> bool {
 
 fn wants_effect(sel: &AttrSel, e: &filmcraft_project::EffectInstance) -> bool {
     sel.effects.as_ref().is_none_or(|ids| ids.contains(&e.effect))
+}
+
+fn copy_effect(s: &mut Session, _: &Value) -> Result<Value> {
+    let sel = s.state.selected_effect.as_ref().ok_or_else(|| bad("effects.copy", "select an effect in Effect Controls"))?;
+    if !with_links(s, &s.state.selection).contains(&sel.clip) {
+        return Err(bad("effects.copy", "select an effect on the current clip"));
+    }
+    let q = s.active_sequence().ok_or(EngineError::NoSequence)?;
+    let (tid, src) = q.find_item(sel.clip).ok_or_else(|| bad("effects.copy", "source clip is missing"))?;
+    let kind = q.track(tid).ok_or(EngineError::NoSequence)?.kind;
+    let index = sel.index(&src.effects).ok_or_else(|| bad("effects.copy", "source effect is missing"))?;
+    let effect = src.effects.get(index).ok_or_else(|| bad("effects.copy", "source effect is missing"))?.clone();
+    if filmcraft_project::graphic::is_layer(&effect) || effect.essential {
+        return Err(bad("effects.copy", "select an effect or an intrinsic settings section"));
+    }
+    let name = effect.effect.clone();
+    let mut source = src.clone();
+    source.effects = vec![effect];
+    s.state.effect_clipboard = Some((kind, source));
+    s.state.clipboard.clear();
+    s.state.caption_clipboard.clear();
+    s.state.clipboard_markers.clear();
+    Ok(json!({"copied": 1, "effect": name}))
+}
+
+pub(crate) fn paste_effect(s: &mut Session, p: &Value) -> Result<Value> {
+    let (kind, src) = s.state.effect_clipboard.clone().ok_or_else(|| bad("effects.paste", "copy an effect first"))?;
+    let effect = src.effects.first().ok_or_else(|| bad("effects.paste", "effect clipboard is empty"))?;
+    let targets = with_links(s, &clips_p(s, p));
+    let scale = bool_p(p, "scaleTimes").unwrap_or(true);
+    let intrinsic = effect.def().is_some_and(|d| d.intrinsic);
+    let n = s.edit_sequence("Paste Effect", |q, _, _| {
+        let mut n = 0;
+        for id in &targets {
+            let Some((tid, _)) = q.find_item(*id) else { continue };
+            if q.track(tid).is_none_or(|t| t.kind != kind || t.locked) {
+                continue;
+            }
+            let Some((_, dst)) = q.find_item_mut(*id) else { continue };
+            let mut copied = effect.clone();
+            retime_effect(&mut copied, &src, dst, scale);
+            if intrinsic && let Some(slot) = dst.effects.iter_mut().find(|e| e.effect == copied.effect) {
+                *slot = copied;
+            } else {
+                dst.effects.push(copied);
+            }
+            n += 1;
+        }
+        if n == 0 {
+            return Err(bad("effects.paste", "select compatible unlocked clips"));
+        }
+        Ok(n)
+    })?;
+    Ok(json!({"clips": n}))
 }
 
 fn paste_attributes(s: &mut Session, p: &Value) -> Result<Value> {

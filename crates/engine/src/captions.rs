@@ -174,6 +174,7 @@ pub fn copy(s: &mut Session) -> usize {
     let min = picked.iter().map(|(_, c)| c.start).min().unwrap_or_default();
     s.state.caption_clipboard = picked.into_iter().map(|(ti, c)| (ti, filmcraft_project::Caption { start: c.start - min, ..c })).collect();
     s.state.clipboard.clear();
+    s.state.effect_clipboard = None;
     s.state.clipboard_markers.clear();
     s.state.caption_clipboard.len()
 }

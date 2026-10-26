@@ -867,6 +867,24 @@ pub fn zoomed_thumbnail_tiles(
     tiles.into_iter().map(|(x, t)| (x0 + (x - x0) * r, tile_w * r, t)).collect()
 }
 
+/// Shared paint/hit rectangle; keep the outer trim handle separate from the badge.
+fn fx_badge_rect(body: Rect, item: &TrackItem) -> Option<Rect> {
+    ((item.has_standard_effects() || item.has_modified_intrinsics()) && body.width() > 40.0)
+        .then(|| Rect::from_min_max(pos2(body.max.x - 25.0, body.min.y + 1.0), pos2(body.max.x - 5.0, body.min.y + 18.0)))
+}
+
+fn fx_badge_at(seq: &Sequence, layout: &Layout, p: Pos2) -> Option<ClipId> {
+    if !layout.content.contains(p) {
+        return None;
+    }
+    let row = layout.row_at(p.y)?;
+    let track = seq.track(row.track)?;
+    track.items.iter().find_map(|item| {
+        let body = Rect::from_min_max(pos2(layout.x_of(item.start), row.rect.min.y + 1.0), pos2(layout.x_of(item.end()), row.rect.max.y - 1.0));
+        fx_badge_rect(body, item).filter(|r| r.contains(p)).map(|_| item.id)
+    })
+}
+
 #[allow(clippy::too_many_arguments)]
 fn draw_clip(
     app: &mut FilmcraftApp,
@@ -955,7 +973,8 @@ fn draw_clip(
         );
     }
     // fx badge right-aligned in the header (italic-ish "fx")
-    if (it.has_standard_effects() || it.has_modified_intrinsics()) && w > 40.0 {
+    if let Some(badge) = fx_badge_rect(body, it) {
+        app.auto.add(&format!("timeline.clip.{}.fx", it.id.0), badge.intersect(p.clip_rect()), "Effect Controls");
         let col = if it.has_standard_effects() { Color32::from_rgb(0xe8, 0xc5, 0x4a) } else { Color32::from_rgb(0x91, 0xa2, 0xac) };
         clip_p.text(
             pos2(body.max.x - 6.0, body.min.y + 8.5),
@@ -1906,8 +1925,8 @@ fn preview_drag(app: &FilmcraftApp, seq: &Sequence, out: &mut HashMap<ClipId, (T
                 out.insert(*clip, (it.start, it.duration + *delta, None));
             }
         }
-        Drag::Trim { clip, edge, delta, .. } => {
-            for c in filmcraft_engine::commands::with_links(&app.session, &[*clip]) {
+        Drag::Trim { clip, edge, mode, delta, .. } => {
+            for c in filmcraft_engine::commands::trim_targets(&app.session, *clip, *mode) {
                 if let Some((_, it)) = seq.find_item(c) {
                     moved(it, *edge, *delta);
                 }
@@ -1994,7 +2013,8 @@ fn marquee_clips(seq: &Sequence, layout: &Layout, r: Rect) -> Vec<ClipId> {
 fn drag_is_locked(session: &filmcraft_engine::Session, seq: &Sequence, drag: &Drag) -> bool {
     let clips = match drag {
         Drag::Move { clips, track_delta, .. } => return move_is_locked(seq, clips, *track_delta),
-        Drag::Trim { clip, .. } | Drag::Stretch { clip, .. } | Drag::Remix { clip, .. } | Drag::Slip { clip, .. } | Drag::Slide { clip, .. } => vec![*clip],
+        Drag::Trim { clip, mode, .. } => filmcraft_engine::commands::trim_targets(session, *clip, *mode),
+        Drag::Stretch { clip, .. } | Drag::Remix { clip, .. } | Drag::Slip { clip, .. } | Drag::Slide { clip, .. } => vec![*clip],
         Drag::Roll { left, right, .. } => vec![*left, *right],
         Drag::Transition { id, .. } => return seq.all_tracks().any(|t| t.locked && t.transitions.iter().any(|tr| tr.id == *id)),
         _ => return false,
@@ -2402,6 +2422,25 @@ fn interact(app: &mut FilmcraftApp, ui: &mut egui::Ui, seq: &Sequence, layout: &
 
     super::tools::cursor_badge(ui, area, tool);
 
+    if tool == Tool::Selection
+        && app.tl.drag.is_none()
+        && let Some(p) = pos
+        && let Some(clip) = fx_badge_at(seq, layout, p)
+    {
+        ctx.set_cursor_icon(CursorIcon::PointingHand);
+        if resp.clicked() {
+            app.tl.pressed = None;
+            match app.session.execute("timeline.select", json!({"clips": [clip.0], "linked": false})) {
+                Ok(_) => {
+                    app.show_panel(crate::dock::PanelKind::EffectControls);
+                    app.ui.focused = crate::dock::PanelKind::EffectControls;
+                }
+                Err(e) => app.ui.status = e.to_string(),
+            }
+            return;
+        }
+    }
+
     // ---- press: act on what was under the pointer when the button went down (#259)
     if !app.tl.cancelled && (resp.drag_started() || (resp.clicked() && app.tl.drag.is_none())) {
         let pressed = match app.tl.pressed.take() {
@@ -2671,9 +2710,10 @@ fn interact(app: &mut FilmcraftApp, ui: &mut egui::Ui, seq: &Sequence, layout: &
             }
             Drag::Trim { clip, edge, mode, from, .. } => seq.find_item(clip).map(|(_, it)| {
                 let base = if edge == filmcraft_edit::Edge::In { it.start } else { it.end() };
-                let target = snap(app, seq, layout, rate.snap_nearest(base + (t_here - from)), &[clip]);
+                let targets = filmcraft_engine::commands::trim_targets(&app.session, clip, mode);
+                let target = snap(app, seq, layout, rate.snap_nearest(base + (t_here - from)), &targets);
                 // stop at the end of the media (or the neighbour), as the trim on release will (#653)
-                let delta = filmcraft_engine::commands::trim_delta(&app.session, clip, edge, mode, target - base).unwrap_or(target - base);
+                let delta = filmcraft_engine::commands::trim_delta(&app.session, clip, edge, mode, target - base).unwrap_or(Tick::ZERO);
                 Drag::Trim { clip, edge, mode, delta, from }
             }),
             Drag::Remix { clip, from, .. } => seq.find_item(clip).map(|(_, it)| {
@@ -2779,7 +2819,7 @@ fn interact(app: &mut FilmcraftApp, ui: &mut egui::Ui, seq: &Sequence, layout: &
                 }
                 Drag::Trim { clip, edge, mode, delta, .. } if delta != Tick::ZERO => Some(app.session.execute(
                     "timeline.trim",
-                    json!({"clip": clip.0, "edge": if edge == filmcraft_edit::Edge::In {"in"} else {"out"}, "mode": if mode == filmcraft_edit::TrimMode::Ripple {"ripple"} else {"regular"}, "delta": delta.0}),
+                    json!({"clip": clip.0, "edge": if edge == filmcraft_edit::Edge::In {"in"} else {"out"}, "mode": if mode == filmcraft_edit::TrimMode::Ripple {"ripple"} else {"regular"}, "delta": delta.0, "selection": true}),
                 )),
                 Drag::Stretch { clip, edge, delta, .. } if delta != Tick::ZERO => Some(app.session.execute("timeline.rateStretch", json!({"clip": clip.0, "edge": if edge == filmcraft_edit::Edge::In {"in"} else {"out"}, "delta": delta.0}))),
                 Drag::Remix { clip, delta, .. } if delta != Tick::ZERO => {
@@ -3168,7 +3208,7 @@ fn interact(app: &mut FilmcraftApp, ui: &mut egui::Ui, seq: &Sequence, layout: &
             let start = snap(app, seq, layout, rate.snap_nearest(layout.tick_at(p.x).max(Tick::ZERO)), &[]);
             // one command, one undo step: the files go end to end from the drop point
             let ids: Vec<u64> = items.iter().map(|i| i.0).collect();
-            let params = json!({"items": ids, "track": vt, "audioTrack": at, "time": start.0, "insert": false});
+            let params = json!({"items": ids, "track": vt, "audioTrack": at, "time": start.0, "insert": false, "freeTrack": true});
             if let Err(e) = app.session.execute("timeline.place", params) {
                 app.ui.status = e.to_string();
             }

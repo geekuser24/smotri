@@ -563,3 +563,48 @@ fn linked_video_drag_adds_video_and_audio_tracks() {
 fn linked_audio_drag_adds_audio_and_video_tracks() {
     move_existing_clip_to_a_new_track(true, true);
 }
+
+#[test]
+fn unlinked_selection_edge_drag_trims_both_clips() {
+    let mut d = Driver::demo();
+    d.harness.state_mut().session.state.linked_selection = false;
+    let a = d.v1_clip(CITY);
+    let b = d.v1_clip(DUNES);
+    d.exec("timeline.select", json!({"clips":[a,b]}));
+    let before_a = d.span(a);
+    let before_b = d.span(b);
+    let (_, x, y) = d.edges(b);
+    d.drag(pos2(x - 2.0, y), pos2(x - 27.0, y), 12);
+    let da = d.span(a).1 - before_a.1;
+    let db = d.span(b).1 - before_b.1;
+    assert!(da < 0, "both clips must shrink, got {da}, {db}");
+    assert_eq!(da, db);
+    d.exec("edit.undo", json!({}));
+    assert_eq!(d.span(a), before_a);
+    assert_eq!(d.span(b), before_b);
+}
+
+#[test]
+fn fx_badge_selects_clip_and_opens_effect_controls_from_another_tab() {
+    let mut d = Driver::demo();
+    let c = d.v1_clip(CITY);
+    d.exec("effects.setParam", json!({"clip":c,"effect":"motion","param":"rotation","value":15.0}));
+    d.ok("ui.panel.show", json!({"panel":"MediaBrowser"}));
+    d.ok("ui.click", json!({"id":format!("timeline.clip.{c}.fx")}));
+    d.frames(4);
+    assert_eq!(d.app().ui.focused, filmcraft_ui_egui::dock::PanelKind::EffectControls);
+    assert!(d.app().session.state.selection.contains(&ClipId(c)));
+    let elements = d.ok("ui.elements", json!({"prefix":"effectControls."}));
+    assert!(!elements.as_array().unwrap().is_empty());
+}
+
+#[test]
+#[ignore = "renders a local visual check using the GPU"]
+fn fx_controls_visual_check() {
+    let mut d = Driver::demo();
+    let c = d.v1_clip(CITY);
+    d.exec("effects.setParam", json!({"clip":c,"effect":"motion","param":"rotation","value":15.0}));
+    d.ok("ui.panel.show", json!({"panel":"MediaBrowser"}));
+    d.ok("ui.click", json!({"id":format!("timeline.clip.{c}.fx")}));
+    d.screenshot("smotri-fx-controls");
+}

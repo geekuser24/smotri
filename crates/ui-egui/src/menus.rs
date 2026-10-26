@@ -248,6 +248,12 @@ pub(crate) fn invoke_command(app: &mut FilmcraftApp, ctx: &egui::Context, id: &s
     if id == "jarvis.settings" {
         return crate::panels::settings::open(app, "jarvis");
     }
+    if id == "edit.copy" && app.ui.focused == PanelKind::EffectControls && app.session.state.selected_effect.is_some() {
+        let result = app.session.execute("effects.copy", json!({})).map_err(|e| e.to_string())?;
+        remember_stale_clipboard_media(app);
+        ctx.copy_text(result["effect"].as_str().unwrap_or("Effect").to_owned());
+        return Ok(result);
+    }
     if id == "edit.selectAll" && (crate::panels::graphics::select_all_edited_text(app) || crate::panels::effect_controls::select_all_keyframes(app)) {
         return Ok(Value::Null);
     }

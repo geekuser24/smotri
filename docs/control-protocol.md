@@ -148,6 +148,22 @@ panel's drag passes `linked: false`, because it already lists exactly the clips 
 destinations instead (linked partners are copied too, unless `linked: false`); the result lists
 the new clips as `copied`, they are selected, and copies of linked clips are linked to each other.
 
+**Selected edge trim:** `timeline.trim {clip, edge, mode:"regular", delta, selection:true}`
+uses the selected clips when `clip` belongs to the selection, expanding linked partners as usual.
+All receive the same delta constrained by their source handles and neighbours. Without `selection`,
+and for ripple trims, the existing single-clip/linked behavior is retained.
+
+**External file placement:** `timeline.place {items, time, track?, audioTrack?, freeTrack:true}`
+finds an unlocked, unoccupied destination from each requested track outward, adding tracks as needed.
+The entire placement is one undo step; `insert:true` retains insert behavior instead.
+
+**Effect clipboard:** `effects.select {clip,effect}` then `effects.copy {}` copies that row's
+parameters, keys, masks and plugin state. `effects.paste {clips?,scaleTimes:true}` or `edit.paste {}`
+applies it to selected compatible unlocked clips in one undo step. Intrinsics replace the matching
+section; standard effects append. A normal clip/caption copy replaces this clipboard. The UI routes
+Copy from Effect Controls to the row and preserves text-field editing. `timeline.clip.<id>.fx` is
+the clickable badge that selects the clip and opens Effect Controls.
+
 **Trim mode** (`crates/engine/src/trim.rs`): `trim.selectEditPoint` / `trim.selectNearest` enter trim
 mode (the Program monitor becomes the Trim Monitor, ids `trimMonitor.*`); `trim.monitor` returns what
 it shows. Dynamic trimming takes an explicit clock (seconds) so it is deterministic: `trim.shuttle

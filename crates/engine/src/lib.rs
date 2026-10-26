@@ -341,6 +341,9 @@ pub struct EditorState {
     /// Timeline clipboard (serialized track items with their relative track index).
     #[serde(skip)]
     pub clipboard: Vec<(TrackKind, usize, filmcraft_project::TrackItem)>,
+    /// A copied Effect Controls row, with source timing for its keyframes.
+    #[serde(skip)]
+    pub effect_clipboard: Option<(TrackKind, filmcraft_project::TrackItem)>,
     pub default_video_transition: String,
     pub default_audio_transition: String,
     /// Selected edit points (trim mode).

@@ -13,8 +13,8 @@ use vst3::{Class, ComPtr, ComWrapper, Interface, Steinberg::Vst::*, Steinberg::*
 fn status(result: tresult, operation: &str) -> Result<(), String> {
     if result == kResultOk { Ok(()) } else { Err(format!("VST3 {operation}: {result}")) }
 }
-fn text(bytes: &[i8]) -> String {
-    String::from_utf8_lossy(&bytes.iter().take_while(|b| **b != 0).map(|b| *b as u8).collect::<Vec<_>>()).into_owned()
+fn text(bytes: &[std::ffi::c_char]) -> String {
+    String::from_utf8_lossy(&bytes.iter().take_while(|b| **b != 0).map(|b| b.to_ne_bytes()[0]).collect::<Vec<_>>()).into_owned()
 }
 fn wide(bytes: &[u16]) -> String {
     String::from_utf16_lossy(&bytes.iter().copied().take_while(|b| *b != 0).collect::<Vec<_>>())

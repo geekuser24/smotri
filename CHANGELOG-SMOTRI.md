@@ -1,5 +1,13 @@
 # Изменения Smotri
 
+## 0.12.0 preview.20261026.5
+
+- Regular edge drags trim all selected clips together, including unlinked video/audio. Media handles and neighbours constrain the common delta; one Undo restores the group.
+- Files dropped from Finder/Explorer onto an occupied timeline use a free track, creating one when necessary. Empty timelines still create a sequence automatically.
+- Clicking a clip's FX badge selects it and opens Effect Controls.
+- Copy a selected Effect Controls section with Cmd/Ctrl+C and paste with Cmd/Ctrl+V onto multiple selected compatible clips. Intrinsic settings are replaced, added effects are appended, keyframes adapt to the destination duration, and installed plugin state is retained. Text fields keep their editing shortcuts.
+- Fix the VST3 character ABI for Linux ARM64 builds. Includes the isolated VST2/VST3/AU host introduced in the previous source update.
+
 ## 0.12.0 preview.20261026.4
 
 - Установленные аудиоэффекты VST 2.4, VST3 и Audio Units на macOS: сканирование
