@@ -64,6 +64,7 @@ mod shuttle;
 pub mod soundpad;
 pub mod source_playback;
 pub mod state;
+mod text_input;
 pub mod theme;
 mod theme_favorites;
 pub mod widgets;
@@ -130,6 +131,10 @@ pub struct AudioDevices {
 /// Host hooks for native file dialogs etc.
 #[derive(Default)]
 pub struct HostHooks {
+    /// One queued document-open request from the OS, never a direct project mutation.
+    pub next_document: Option<Box<dyn FnMut() -> Option<String>>>,
+    /// Text clipboard for native Edit menu actions while a text field is focused.
+    pub clipboard_text: Option<Box<dyn FnMut() -> Option<String>>>,
     pub pick_files: Option<Box<dyn FnMut(&[&str]) -> Vec<String>>>,
     /// The cursor in physical screen pixels. Where the windowing layer reports no pointer while files are dragged in from the OS (Windows), a drop is placed where this says it landed.
     pub cursor_screen_position: Option<Box<dyn Fn() -> Option<(i32, i32)>>>,
@@ -375,6 +380,7 @@ pub struct FilmcraftApp {
     /// The next close request quits without asking to save (Save / Don't Save was chosen in the
     /// quit prompt, or the control channel's `app.quit`).
     pub quit_confirmed: bool,
+    pub(crate) text_input_active: bool,
     fonts_ready: bool,
     pub integrated_titlebar: bool,
     pub last_timeline_width: f32,
@@ -616,6 +622,7 @@ impl FilmcraftApp {
             ui_error: None,
             panic_next_frame: false,
             quit_confirmed: false,
+            text_input_active: false,
             fonts_ready: false,
             integrated_titlebar: false,
             last_timeline_width: 1000.0,
@@ -1582,6 +1589,19 @@ impl FilmcraftApp {
     }
 
     fn handle_shortcuts(&mut self, ctx: &egui::Context) {
+        self.text_input_active = ctx.text_edit_focused();
+        if self.text_input_active {
+            // Text fields consume Paste themselves, but we still need the physical V release.
+            // Otherwise a native menu paste leaves v_down set after focus leaves the field,
+            // swallowing the next file/image paste on the timeline.
+            ctx.input(|i| {
+                for event in &i.events {
+                    if let egui::Event::Key { key: egui::Key::V, pressed, .. } = event {
+                        self.v_down = *pressed;
+                    }
+                }
+            });
+        }
         if panels::frame_export::is_open(ctx) {
             return;
         }
@@ -1594,7 +1614,7 @@ impl FilmcraftApp {
         // A pane divider or floating-panel grip keeps focus after a pointer drag so arrows can
         // nudge it, but it takes no other key: Space and the other shortcuts keep working (#1482).
         let divider_focused = self.divider_focused(ctx);
-        if (ctx.egui_wants_keyboard_input() && !divider_focused) || self.dialog == Some(Dialog::Shortcuts) {
+        if ctx.text_edit_focused() || (ctx.egui_wants_keyboard_input() && !divider_focused) || self.dialog == Some(Dialog::Shortcuts) {
             return;
         }
         // A focused text field takes every unmodified key, including the ones our shortest
@@ -1890,6 +1910,9 @@ impl FilmcraftApp {
                 if self.control_input_only && id != "app.quit" {
                     continue;
                 }
+                if text_input::route(self, &ctx, &id) {
+                    continue;
+                }
                 if matches!(id.as_str(), "edit.paste" | "edit.pasteInsert" | "edit.pasteAttributes") {
                     // macOS menu key equivalents consume Cmd+V down, but winit can still
                     // deliver V up. Do not synthesize a second Paste for that same gesture.
@@ -2136,7 +2159,7 @@ fn synthesize_mac_ctrl_click(armed: &mut bool, raw_input: &mut egui::RawInput) {
 }
 
 impl eframe::App for FilmcraftApp {
-    fn raw_input_hook(&mut self, _ctx: &egui::Context, raw_input: &mut egui::RawInput) {
+    fn raw_input_hook(&mut self, ctx: &egui::Context, raw_input: &mut egui::RawInput) {
         self.native_window_focused = Some(raw_input.focused);
         #[cfg(target_os = "macos")]
         if !self.control_input_only {
@@ -2175,11 +2198,22 @@ impl eframe::App for FilmcraftApp {
                 raw_input.events.push(event);
             }
         }
+        if cfg!(target_os = "macos") {
+            text_input::control_aliases(self, ctx, raw_input);
+        }
     }
 
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         // a native file dialog's answer first, so the panels draw what it chose (#260)
         self.poll_native_dialog(ctx);
+        if !self.control_input_only
+            && self.native_dialog.is_none()
+            && self.ui.clip_dialog.is_none()
+            && self.dialog.is_none()
+            && let Some(path) = self.hooks.next_document.as_mut().and_then(|f| f())
+        {
+            panels::clip_dialogs::open_document(self, path);
+        }
         if !self.styled {
             theme::install(ctx, &self.tokens);
             // theme::install replaces the fonts: add the system Japanese font back (or fall back to

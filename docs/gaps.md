@@ -209,7 +209,11 @@ platforms** G4, G9, G17; **performance** G16; **ecosystem** G11; **measurement**
 - **Missing:** VST3 / Audio Units, OpenFX, Premiere / After Effects plug-in APIs, UXP panels
   (#325).
 - **Impact:** many professional editors depend on third-party effects and audio plug-ins.
-- **Needs:** an owner decision (FFI under the `unsafe` rule, AGENTS.md §0.3). **200–400 h.**
+- **Smotri decision (2026-10-26):** the owner approved a separate native audio-plugin
+  host with bounded IPC, without loading plugins into the editor. See
+  [ADR 0002](adr/0002-smotri-native-audio-host.md). Implementation and compatibility
+  validation are pending; released builds do not yet host VST3/AU effects.
+  OpenFX and other plugin APIs remain outside this approval. **200–400 h.**
 
 ## G12. AI features
 

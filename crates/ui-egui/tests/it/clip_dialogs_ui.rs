@@ -466,3 +466,46 @@ fn clip_context_menu_adds_a_marker_at_the_playhead_with_one_undo() {
         assert_eq!(serde_json::to_value(&*d.app().session.project).unwrap(), serde_json::to_value(&*after).unwrap());
     }
 }
+
+#[test]
+fn finder_open_protects_unsaved_work_and_reports_invalid_projects() {
+    let dir = tempfile::tempdir().unwrap();
+    let target = dir.path().join("Finder русский %.fcproj");
+    let saved = dir.path().join("Saved.fcproj");
+    let mut source = Session::default();
+    source.execute("file.saveAs", json!({"path":target})).unwrap();
+    let mut d = Driver::new();
+    d.exec("file.saveAs", json!({"path":saved}));
+    d.exec("markers.add", json!({"name":"Unsaved marker"}));
+    assert!(d.app().session.is_dirty());
+    let before = d.app().session.project.clone();
+    let mut paths = std::collections::VecDeque::from([target.to_string_lossy().into_owned()]);
+    d.app().hooks.next_document = Some(Box::new(move || paths.pop_front()));
+    d.frames(4);
+    assert!(d.has("openProject.cancel"));
+    assert_eq!(*d.app().session.project, *before);
+    d.click("openProject.cancel");
+    assert!(d.app().session.is_dirty());
+    assert_eq!(*d.app().session.project, *before);
+
+    let invalid = dir.path().join("Invalid.fcproj");
+    std::fs::write(&invalid, "not a project").unwrap();
+    let mut paths = std::collections::VecDeque::from([invalid.to_string_lossy().into_owned()]);
+    d.app().hooks.next_document = Some(Box::new(move || paths.pop_front()));
+    d.frames(4);
+    d.click("openProject.dontSave");
+    assert!(!d.app().ui.clip_dialog.as_ref().unwrap().error.is_empty());
+    assert_eq!(*d.app().session.project, *before);
+    assert!(d.app().session.is_dirty());
+    d.click("openProject.cancel");
+
+    let mut paths = std::collections::VecDeque::from([target.to_string_lossy().into_owned()]);
+    d.app().hooks.next_document = Some(Box::new(move || paths.pop_front()));
+    d.frames(4);
+    d.click("openProject.save");
+    assert_eq!(d.app().session.path.as_deref(), target.to_str());
+    assert!(!d.app().session.is_dirty());
+    let mut restored = Session::default();
+    restored.execute("file.open", json!({"path":saved})).unwrap();
+    assert_eq!(*restored.project, *before, "save choice preserves the previous project's edits");
+}

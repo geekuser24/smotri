@@ -348,3 +348,66 @@ fn native_paste_followed_by_key_release_imports_once_and_next_paste_still_works(
         }
     }
 }
+
+/// macOS's menu key equivalents arrive outside egui's key events. Even with a timeline
+/// selection and an image in the clipboard they must edit the focused search, exactly once.
+#[test]
+fn native_edit_menu_targets_search_and_restores_timeline_shortcuts_on_blur() {
+    let mut d = Driver::demo("native-text");
+    let first = d.clips()[0].2;
+    d.app().session.execute("timeline.select", json!({"clips":[first]})).unwrap();
+    let before = serde_json::to_value(&d.app().session.project).unwrap();
+    let selection = d.app().session.state.selection.clone();
+    let undo = d.app().session.history.undo.len();
+    let asked = d.clipboard(Some(red_image));
+    d.app().hooks.clipboard_text = Some(Box::new(|| Some("Новый поиск".into())));
+    let (tx, rx) = channel();
+    d.app().command_inbox = Some(rx);
+    d.ok("ui.click", json!({"id":"project.search"}));
+    d.ok("ui.type", json!({"text":"Camera шаблоны"}));
+    d.frames(3);
+    assert!(d.harness.ctx.text_edit_focused());
+    for action in ["edit.selectAll", "edit.copy", "edit.cut"] {
+        tx.send(action.into()).unwrap();
+        d.frames(2);
+    }
+    assert_eq!(d.app().ui.project_search, "");
+    tx.send("edit.paste".into()).unwrap();
+    d.frames(2);
+    d.ctrl_v_without_text(egui::Modifiers::COMMAND);
+    assert_eq!(d.app().ui.project_search, "Новый поиск");
+    #[cfg(target_os = "macos")]
+    {
+        d.app().hooks.clipboard_text = Some(Box::new(|| Some("После Ctrl+V".into())));
+        for (key, pressed) in [(egui::Key::A, true), (egui::Key::A, false), (egui::Key::V, true), (egui::Key::V, false)] {
+            d.harness.input_mut().events.push(egui::Event::Key { key, physical_key: Some(key), pressed, repeat: false, modifiers: egui::Modifiers::CTRL });
+            d.frames(1);
+        }
+        assert_eq!(d.app().ui.project_search, "После Ctrl+V");
+    }
+    tx.send("edit.selectAll".into()).unwrap();
+    d.frames(2);
+    tx.send("edit.clear".into()).unwrap();
+    d.frames(2);
+    assert_eq!(d.app().ui.project_search, "");
+    for action in ["edit.undo", "edit.redo", "edit.rippleDelete", "edit.pasteAttributes"] {
+        tx.send(action.into()).unwrap();
+        d.frames(2);
+    }
+    assert_eq!(asked.get(), 0, "text editing never imports clipboard media");
+    assert_eq!(serde_json::to_value(&d.app().session.project).unwrap(), before);
+    assert_eq!(d.app().session.state.selection, selection);
+    assert_eq!(d.app().session.history.undo.len(), undo);
+    if let Some(id) = d.harness.ctx.memory(|m| m.focused()) {
+        d.harness.ctx.memory_mut(|m| m.surrender_focus(id));
+    }
+    d.frames(3);
+    tx.send("edit.selectAll".into()).unwrap();
+    d.frames(2);
+    assert!(d.app().session.state.selection.len() > selection.len(), "timeline command works after leaving the field");
+    d.app().ui.focused = filmcraft_ui_egui::dock::PanelKind::Timeline;
+    let count = d.clips().len();
+    d.ctrl_v_without_text(egui::Modifiers::COMMAND);
+    assert_eq!(d.clips().len(), count + 1, "first media paste after editing text is not swallowed");
+    assert_eq!(asked.get(), 1);
+}

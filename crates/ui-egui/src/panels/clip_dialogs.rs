@@ -59,6 +59,7 @@ fn meta(command: &str) -> Option<(&'static str, &'static str)> {
         "clip.fieldOptions" => (tl!("Field Options"), "fieldOptions"),
         "clip.speedDuration" => (tl!("Clip Speed / Duration"), "speedDuration"),
         "file.closeProject" => (tl!("Save Project"), "closeProject"),
+        "file.open" => (tl!("Save Project"), "openProject"),
         "app.quit" => (tl!("Save Project"), "quit"),
         _ => return None,
     })
@@ -85,6 +86,10 @@ fn hold_on() -> [(&'static str, &'static str); 5] {
 
 /// Menu / shortcut entry points without params open a dialog. Returns None for other ids.
 pub fn route(app: &mut FilmcraftApp, id: &str, params: &Value) -> Option<Result<Value, String>> {
+    // The Finder prompt is created by open_document with a concrete path, not by File → Open.
+    if id == "file.open" {
+        return None;
+    }
     let empty = params.as_object().is_none_or(|m| m.is_empty());
     if !empty {
         return None;
@@ -117,6 +122,18 @@ pub fn intercept_quit(app: &mut FilmcraftApp) -> bool {
         app.ui.clip_dialog = Some(ClipDialogDraft { command: "app.quit".into(), params: json!({}), info: Value::Null, error: String::new() });
     }
     true
+}
+
+/// Finder requests use the same reader as File → Open; never discard a dirty session silently.
+pub fn open_document(app: &mut FilmcraftApp, path: String) {
+    if app.session.path.as_deref() == Some(&path) {
+        return;
+    }
+    if app.session.is_dirty() {
+        app.ui.clip_dialog = Some(ClipDialogDraft { command: "file.open".into(), params: json!({"path": path}), info: Value::Null, error: String::new() });
+    } else if let Err(e) = app.session.execute("file.open", json!({"path": path})) {
+        app.ui_error = Some(e.to_string());
+    }
 }
 
 /// Initial parameters (and display info) of a command's dialog.
@@ -539,7 +556,7 @@ pub fn show(app: &mut FilmcraftApp, ctx: &egui::Context) {
                     }
                 }
             }
-            "file.closeProject" | "app.quit" => {
+            "file.closeProject" | "app.quit" | "file.open" => {
                 ui.label(tlf!("Save changes to “{project_name}” before closing?", project_name));
                 ui.add_space(8.0);
                 ui.horizontal(|ui| {
@@ -621,6 +638,16 @@ pub fn show(app: &mut FilmcraftApp, ctx: &egui::Context) {
                     app.ui.clip_dialog = Some(d);
                     return;
                 }
+            }
+            if d.command == "file.open" {
+                match app.session.execute("file.open", d.params.clone()) {
+                    Ok(_) => app.ui.clip_dialog = None,
+                    Err(e) => {
+                        d.error = e.to_string();
+                        app.ui.clip_dialog = Some(d);
+                    }
+                }
+                return;
             }
             // Quit ▸ Don't Save discards the changes: closing the project also clears their recovery
             // snapshot, so the next launch doesn't offer them back

@@ -36,6 +36,9 @@ mod annexb;
 mod biplanar;
 pub mod cursor;
 #[cfg(target_os = "macos")]
+#[allow(unsafe_code)]
+pub mod document_open;
+#[cfg(target_os = "macos")]
 pub mod hardware_encode;
 pub mod hybrid;
 #[cfg(target_os = "windows")]

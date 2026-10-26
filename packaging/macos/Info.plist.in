@@ -58,6 +58,8 @@
       <string>Smotri Project</string>
       <key>CFBundleTypeRole</key>
       <string>Editor</string>
+      <key>CFBundleTypeIconFile</key>
+      <string>Smotri.icns</string>
       <key>LSHandlerRank</key>
       <string>Owner</string>
       <key>LSItemContentTypes</key>
@@ -81,7 +83,7 @@
         <string>public.json</string>
       </array>
       <key>UTTypeIconFile</key>
-      <string>Smotri</string>
+      <string>Smotri.icns</string>
       <key>UTTypeTagSpecification</key>
       <dict>
         <key>public.filename-extension</key>

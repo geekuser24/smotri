@@ -121,6 +121,10 @@ fn main() -> eframe::Result {
         }
     }
     app_nap::disable();
+    #[cfg(target_os = "macos")]
+    if let Err(e) = filmcraft_platform::document_open::install() {
+        log::error!("{e}");
+    }
     #[cfg(target_os = "linux")]
     dev_icon::ensure_dev_desktop_entry();
     // Panics anywhere go to <data dir>/Logs/crash-<day>.log with a backtrace; the UI pass and
@@ -325,6 +329,13 @@ fn app_creator(launch: Launch, graphics: graphics::GraphicsStart, created: Arc<A
         // that waits for the browser never freezes the UI.
         app.hooks.open_url = Some(Box::new(|url: &str| open::that_detached(url).map_err(|e| e.to_string())));
         app.hooks.clipboard_media = Some(Box::new(clipboard_media));
+        app.hooks.clipboard_text = Some(Box::new(|| arboard::Clipboard::new().ok()?.get_text().ok()));
+        #[cfg(target_os = "macos")]
+        {
+            let ctx = cc.egui_ctx.clone();
+            filmcraft_platform::document_open::set_waker(Arc::new(move || ctx.request_repaint()));
+            app.hooks.next_document = Some(Box::new(filmcraft_platform::document_open::next_path));
+        }
         // Settings ▸ General ▸ Interface Language ▸ System Language (#218).
         #[cfg(target_os = "macos")]
         {

@@ -3,6 +3,18 @@
 The egui frontend draws panels and dialogs, and dispatches project changes through the engine.
 Interactive controls keep stable automation ids regardless of the interface language.
 
+## Text editing and document opening
+
+Focused text fields own Select All, Copy, Cut, Paste, Delete and Undo/Redo, including
+macOS native Edit menu actions. Timeline edits cannot run through those shortcuts
+while typing. Command chords are standard on macOS; Control+A/C/X/V/Z are also
+accepted inside text fields. Leaving the field restores timeline shortcuts.
+
+Finder document-open events are queued by `filmcraft-platform` and handled on the
+UI thread. The `openProject` Save/Don't Save/Cancel prompt protects a dirty session;
+reading a missing or malformed new project keeps the previous document intact.
+The existing `.fcproj` reader and format are unchanged.
+
 ## Control input limits
 
 The control channel bounds `ui.click` to 10 clicks and `ui.drag` to 1024 movement steps (#2784).

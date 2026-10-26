@@ -205,7 +205,16 @@ pub fn targets_source(app: &FilmcraftApp, params: &Value) -> bool {
 }
 
 /// Execute a UI or engine command by id.
-pub fn invoke(app: &mut FilmcraftApp, ctx: &egui::Context, id: &str, mut params: Value) -> Result<Value, String> {
+pub fn invoke(app: &mut FilmcraftApp, ctx: &egui::Context, id: &str, params: Value) -> Result<Value, String> {
+    if crate::text_input::route(app, ctx, id) {
+        return Ok(Value::Null);
+    }
+    invoke_command(app, ctx, id, params)
+}
+
+/// Explicit engine commands have a project target even while a field has focus. Only
+/// user-facing menu/keyboard gestures should be redirected into text editing.
+pub(crate) fn invoke_command(app: &mut FilmcraftApp, ctx: &egui::Context, id: &str, mut params: Value) -> Result<Value, String> {
     if id == "transcript.generate"
         && params.as_object().is_some_and(|p| p.is_empty())
         && app.session.transcriber.as_ref().is_some_and(|t| t.id() == "elevenlabs-scribe-v2")
@@ -807,6 +816,9 @@ pub fn menu_items(app: &FilmcraftApp) -> Vec<MenuItem> {
         if it.id.starts_with("view.") {
             it.checked = crate::panels::monitor_view::checked(app, &it.id).or(crate::panels::menu_dialogs::checked(app, &it.id));
             it.enabled &= crate::panels::monitor_view::enabled(app, &it.id);
+        }
+        if app.text_input_active && it.id.starts_with("edit.") {
+            it.enabled = crate::text_input::editing_command(&it.id);
         }
     }
     crate::panels::workspaces::menu(app, &mut v);

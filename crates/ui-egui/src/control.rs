@@ -121,7 +121,8 @@ pub fn handle(app: &mut FilmcraftApp, ctx: &egui::Context, req: &ControlRequest)
         "engine.execute" | "ui.menu.invoke" => {
             let Some(id) = s("command").or(s("id")) else { return err("missing `command`") };
             let params = p.get("params").cloned().unwrap_or(json!({}));
-            match crate::menus::invoke(app, ctx, id, params) {
+            let invoke = if req.method == "engine.execute" { crate::menus::invoke_command } else { crate::menus::invoke };
+            match invoke(app, ctx, id, params) {
                 Ok(v) => ok(v),
                 Err(e) => err(e),
             }

@@ -46,6 +46,21 @@ panic path, and fix a crash before building on top of it. The cross-app standard
    clippy::unimplemented, clippy::todo, clippy::unreachable)]` (moving to `[workspace.lints.clippy]` once
    every crate is clean). `clippy.toml` allows them in tests: a failing test should fail loudly.
 
+### Smotri owner-approved native boundaries (2026-10-26)
+
+The owner explicitly approved two narrow exceptions to §0.3:
+
+- An isolated audio-plugin host process may use native FFI for installed VST3/AU
+  plugins. The editor, engine and audio IPC client remain safe Rust. No plugin
+  library is loaded into the editor. Scan/process failures must be contained,
+  reported and bounded by timeouts. Every FFI block requires a SAFETY comment.
+- `crates/platform` may receive macOS Finder document-open events and forward
+  paths through a safe, bounded queue. It may not open or replace projects in
+  the callback; the UI must protect unsaved changes.
+
+These exceptions do not permit arbitrary native integration or third-party
+plugin redistribution. All other licensing and never-crash rules remain.
+
 ## 1. Assets: no Adobe artwork, every asset licensed and attributed
 
 This rule is absolute. Breaking it is the most serious mistake a contributor can make on this project.
