@@ -3812,3 +3812,12 @@
 	H.265 (HEVC) needs a hardware encoder (NVENC on NVIDIA GPUs, VideoToolbox on macOS); none was found on this machine, and Smotri has no software H.265 encoder yet. Choose H.264 or ProRes instead.	Для H.265 (HEVC) нужен аппаратный кодировщик (NVENC на NVIDIA или VideoToolbox на macOS). На этом компьютере он не найден, а программного кодировщика H.265 в Смотри пока нет. Выберите H.264 или ProRes.
 	Programme left → device output {l}, right → device output {r}{dev}. Outputs beyond the device's channels fall back to 1 and 2.	Левый канал программы → выход {l}, правый → выход {r}{dev}. Если выбранного выхода нет, используются выходы 1 и 2.
 	Sequence, {w}x{h}, {fps} fps, {rate} Hz	Эпизод, {w}x{h}, {fps} кадров/с, {rate} Гц
+
+	Compress to	Сжать до
+	H.264, two passes; AAC mono/stereo. Maximum size, not exact. Quality may decrease.	H.264, два прохода; AAC моно/стерео. Максимальный размер, не точный. Качество может снизиться.
+	Increase the size limit, shorten the range, or select H.264.	Увеличьте лимит, сократите диапазон или выберите H.264.
+	Size limit is available for H.264.	Ограничение размера доступно для H.264.
+	Hardware Encoding	Аппаратное кодирование
+	Use the hardware encoder when available	Использовать аппаратный кодировщик, если доступен
+	Up	Выше
+	Down	Ниже

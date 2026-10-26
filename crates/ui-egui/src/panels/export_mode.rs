@@ -172,6 +172,10 @@ pub fn show(app: &mut FilmcraftApp, ui: &mut egui::Ui, rect: Rect) {
         return;
     };
     sync_sequence(app);
+    if let Some(q) = app.session.active_sequence() {
+        let (a, b) = range_ticks(&app.ui.export, q);
+        let _ = app.ui.export.settings.fit_size_limit(b - a);
+    }
     let before = settings_json(&app.ui.export.settings);
     queue_column(app, ui, left);
     settings_column(app, ui, mid);
@@ -244,7 +248,7 @@ fn queue_column(app: &mut FilmcraftApp, ui: &mut egui::Ui, rect: Rect) {
                     }
                     ui.horizontal(|ui| {
                         let mut b = |ui: &mut egui::Ui, key: &'static str, text: &str, enabled: bool, cmd: &'static str, params: Value| {
-                            let r = ui.add_enabled(enabled, egui::Button::new(egui::RichText::new(text).size(11.0)).small());
+                            let r = ui.add_enabled(enabled, egui::Button::new(egui::RichText::new(crate::i18n::t(text)).size(11.0)).small());
                             reg.add(format!("export.queue.item.{id}.{key}"), r.rect, text);
                             if r.clicked() {
                                 action = Some((cmd, params));
@@ -838,9 +842,9 @@ fn video_section(ui: &mut egui::Ui, reg: &mut Reg, s: &mut ExportSettings, t: &T
             // every machine without one keeps the built-in encoder.
             // H.265 and AV1 have only hardware encoders: choosing the format is the opt-in.
             if !hevc {
-                row(ui, t, "Hardware Encoding", |ui| {
+                row(ui, t, tl!("Hardware Encoding"), |ui| {
                     let mut on = s.hardware_encoding == HardwareEncoding::Auto;
-                    if check(ui, reg, "export.video.hardwareEncoding", &mut on, "Use the hardware encoder when available") {
+                    if check(ui, reg, "export.video.hardwareEncoding", &mut on, tl!("Use the hardware encoder when available")) {
                         s.hardware_encoding = if on { HardwareEncoding::Auto } else { HardwareEncoding::Off };
                     }
                 });
@@ -1118,18 +1122,58 @@ fn preview_column(app: &mut FilmcraftApp, ui: &mut egui::Ui, rect: Rect, seq_id:
             .max_rect(Rect::from_min_max(pos2(rect.min.x + 14.0, pv_area.max.y + 8.0), pos2(rect.max.x - 14.0, rect.max.y - 50.0)))
             .id_salt("export-right"),
     );
+    let details_height = child.available_height();
+    egui::ScrollArea::vertical().id_salt("export-details-scroll").max_height(details_height).show(&mut child, |child| {
+        export_details(app, child, &q, &mut reg);
+    });
+
+    // buttons
+    let go = Rect::from_min_size(pos2(rect.max.x - 120.0, rect.max.y - 44.0), vec2(104.0, 30.0));
+    let queue = Rect::from_min_size(pos2(go.min.x - 174.0, go.min.y), vec2(164.0, 30.0));
+    let qresp = ui.interact(queue, egui::Id::new("export-queue-send"), Sense::click());
+    ui.painter().rect_stroke(queue, 15.0, egui::Stroke::new(1.0, if qresp.hovered() { t.text } else { t.text_dim }), egui::StrokeKind::Inside);
+    ui.painter().text(queue.center(), Align2::CENTER_CENTER, tl!("Send to Queue"), Tokens::semibold(12.5), t.text);
+    reg.add("export.sendToQueue", queue, "Send to Queue");
+    let resp = ui.interact(go, egui::Id::new("export-go"), Sense::click());
+    ui.painter().rect_filled(go, 15.0, if resp.hovered() { t.accent_hover } else { t.accent });
+    ui.painter().text(go.center(), Align2::CENTER_CENTER, tl!("Export"), Tokens::semibold(13.0), Color32::WHITE);
+    reg.add("export.button", go, "Export");
+    reg.flush(app);
+    if resp.clicked() {
+        let r = app.session.execute("file.exportMedia", export_params(app));
+        match r {
+            Ok(v) => app.ui.status = tlf!("Exporting {path}", path = v["path"].as_str().unwrap_or("")),
+            Err(e) => app.ui.status = e.to_string(),
+        }
+    }
+    if qresp.clicked() {
+        let mut p = export_params(app);
+        if app.ui.export.preset != CUSTOM {
+            // the queue shows which preset an item came from
+            p["preset"] = json!(app.ui.export.preset);
+        }
+        match app.session.execute("export.queue.add", p) {
+            Ok(_) => app.ui.status = tl!("Added to the export queue").into(),
+            Err(e) => app.ui.status = e.to_string(),
+        }
+    }
+}
+
+fn export_details(app: &mut FilmcraftApp, child: &mut egui::Ui, q: &filmcraft_engine::project::Sequence, reg: &mut Reg) {
+    let t = app.tokens;
+    let rate = q.settings.frame_rate;
     let ex = &mut app.ui.export;
     let has_work_area = q.work_area.is_some();
     child.horizontal(|ui| {
         ui.label(egui::RichText::new(tl!("Range")).color(t.text_dim));
         let cur = RANGES.iter().find(|(k, _)| *k == ex.range).map(|x| x.1).unwrap_or("Entire Source");
         let labels: Vec<(String, bool)> = RANGES.iter().map(|(k, l)| (l.to_string(), *k != "workArea" || has_work_area)).collect();
-        if let Some(i) = combo(ui, &mut reg, "export.range", cur, &labels, 140.0) {
+        if let Some(i) = combo(ui, reg, "export.range", cur, &labels, 140.0) {
             ex.range = RANGES[i].0.into();
         }
         if ex.range == "custom" {
-            drag(ui, &mut reg, "export.range.start", &mut ex.custom_start, 0.0..=86_400.0, 0.04, " s", 2);
-            drag(ui, &mut reg, "export.range.end", &mut ex.custom_end, 0.0..=86_400.0, 0.04, " s", 2);
+            drag(ui, reg, "export.range.start", &mut ex.custom_start, 0.0..=86_400.0, 0.04, " s", 2);
+            drag(ui, reg, "export.range.end", &mut ex.custom_end, 0.0..=86_400.0, 0.04, " s", 2);
         }
     });
     if ex.settings.has_video() {
@@ -1139,20 +1183,20 @@ fn preview_column(app: &mut FilmcraftApp, ui: &mut egui::Ui, rect: Rect, seq_id:
                 [(Scaling::ScaleToFit, tl!("Scale To Fit")), (Scaling::ScaleToFill, tl!("Scale To Fill")), (Scaling::StretchToFill, tl!("Stretch To Fill"))];
             let cur = o.iter().find(|(x, _)| *x == ex.settings.scaling).map_or(o[0].1, |x| x.1);
             let labels: Vec<(String, bool)> = o.iter().map(|(_, l)| (l.to_string(), true)).collect();
-            if let Some(i) = combo(ui, &mut reg, "export.scaling", cur, &labels, 140.0) {
+            if let Some(i) = combo(ui, reg, "export.scaling", cur, &labels, 140.0) {
                 ex.settings.scaling = o[i].0;
             }
         });
     }
     // summary
-    let range = range_ticks(ex, &q);
+    let range = range_ticks(ex, q);
     let sum = ex.settings.summary(q.settings.width, q.settings.height, rate, q.settings.sample_rate, range.1 - range.0);
     child.add_space(8.0);
     let resp = egui::Frame::NONE
         .fill(t.field_bg)
         .corner_radius(4.0)
         .inner_margin(egui::Margin::same(10))
-        .show(&mut child, |ui| {
+        .show(child, |ui| {
             ui.set_width(ui.available_width());
             ui.label(egui::RichText::new(tl!("Summary")).strong());
             egui::Grid::new("export-summary-grid").num_columns(2).spacing(vec2(10.0, 3.0)).show(ui, |ui| {
@@ -1192,35 +1236,30 @@ fn preview_column(app: &mut FilmcraftApp, ui: &mut egui::Ui, rect: Rect, seq_id:
     child.add_space(4.0);
     let est = child.label(egui::RichText::new(tlf!("Estimated file size: {size}", size = format_bytes(sum.estimated_bytes))).color(t.text_dim));
     reg.add("export.estimate", est.rect, sum.estimated_size.clone());
-    // buttons
-    let go = Rect::from_min_size(pos2(rect.max.x - 120.0, rect.max.y - 44.0), vec2(104.0, 30.0));
-    let queue = Rect::from_min_size(pos2(go.min.x - 132.0, go.min.y), vec2(122.0, 30.0));
-    let qresp = ui.interact(queue, egui::Id::new("export-queue-send"), Sense::click());
-    ui.painter().rect_stroke(queue, 15.0, egui::Stroke::new(1.0, if qresp.hovered() { t.text } else { t.text_dim }), egui::StrokeKind::Inside);
-    ui.painter().text(queue.center(), Align2::CENTER_CENTER, tl!("Send to Queue"), Tokens::semibold(12.5), t.text);
-    reg.add("export.sendToQueue", queue, "Send to Queue");
-    let resp = ui.interact(go, egui::Id::new("export-go"), Sense::click());
-    ui.painter().rect_filled(go, 15.0, if resp.hovered() { t.accent_hover } else { t.accent });
-    ui.painter().text(go.center(), Align2::CENTER_CENTER, tl!("Export"), Tokens::semibold(13.0), Color32::WHITE);
-    reg.add("export.button", go, "Export");
-    reg.flush(app);
-    if resp.clicked() {
-        let r = app.session.execute("file.exportMedia", export_params(app));
-        match r {
-            Ok(v) => app.ui.status = tlf!("Exporting {path}", path = v["path"].as_str().unwrap_or("")),
-            Err(e) => app.ui.status = e.to_string(),
+    let supported = ex.settings.format == Format::H264;
+    child.horizontal(|ui| {
+        let mut enabled = ex.settings.target_size_bytes.is_some();
+        let toggle = ui.add_enabled(supported || enabled, egui::Checkbox::new(&mut enabled, tl!("Compress to")));
+        reg.add("export.sizeLimit.enabled", toggle.rect, enabled.to_string());
+        if toggle.changed() {
+            ex.settings.target_size_bytes = enabled.then_some(20_000_000);
         }
-    }
-    if qresp.clicked() {
-        let mut p = export_params(app);
-        if app.ui.export.preset != CUSTOM {
-            // the queue shows which preset an item came from
-            p["preset"] = json!(app.ui.export.preset);
+        if let Some(bytes) = ex.settings.target_size_bytes.as_mut() {
+            let mut mb = *bytes as f64 / 1_000_000.0;
+            let response = ui.add(egui::DragValue::new(&mut mb).range(1.0..=100_000.0).speed(1.0).suffix(" MB"));
+            reg.add("export.sizeLimit.mb", response.rect, mb.to_string());
+            if response.changed() && mb.is_finite() {
+                *bytes = (mb.clamp(1.0, 100_000.0) * 1_000_000.0).floor() as u64;
+            }
         }
-        match app.session.execute("export.queue.add", p) {
-            Ok(_) => app.ui.status = tl!("Added to the export queue").into(),
-            Err(e) => app.ui.status = e.to_string(),
+    });
+    if ex.settings.target_size_bytes.is_some() {
+        child.small(tl!("H.264, two passes; AAC mono/stereo. Maximum size, not exact. Quality may decrease."));
+        if ex.settings.fit_size_limit(range.1 - range.0).is_err() {
+            child.colored_label(Color32::LIGHT_RED, tl!("Increase the size limit, shorten the range, or select H.264."));
         }
+    } else if !supported {
+        child.small(tl!("Size limit is available for H.264."));
     }
 }
 

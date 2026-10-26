@@ -26,6 +26,7 @@ mod pipeline;
 pub mod presets;
 mod raster;
 pub mod settings;
+mod size_limit;
 pub mod still;
 pub use audio_out::LoudnessReport;
 pub use job::{Exporter, Step, stepped};
@@ -54,6 +55,8 @@ pub enum ExportError {
     Io(String),
     #[error("encode: {0}")]
     Encode(String),
+    #[error("Output is {actual} bytes, exceeding the {limit}-byte limit; increase the size limit or shorten the export")]
+    SizeLimit { actual: u64, limit: u64 },
     #[error("cancelled")]
     Cancelled,
 }
@@ -318,6 +321,9 @@ pub struct ExportSettings {
     pub quality: u8,
     /// Target video bitrate (kbps) for bitrate-driven encoders.
     pub bitrate_kbps: u32,
+    /// Maximum finished H.264 file size in decimal bytes; two-pass software encoding.
+    #[serde(default)]
+    pub target_size_bytes: Option<u64>,
     /// Burn the visible caption tracks into the picture (Export ▸ Captions ▸ Burn Captions Into
     /// Video).
     pub burn_captions: bool,
@@ -432,10 +438,15 @@ enum AudioWriter {
 enum Out {
     File(std::io::BufWriter<std::fs::File>),
     Mem(std::io::Cursor<Vec<u8>>),
+    BoundedMem(std::io::Cursor<Vec<u8>>, u64),
+    Staged(std::io::BufWriter<std::fs::File>, size_limit::StagePath),
 }
 
 impl Out {
     fn create(settings: &ExportSettings) -> Result<Out> {
+        if settings.target_size_bytes.is_some() {
+            return Out::create_path(settings, &settings.path);
+        }
         if let Some(file) = &settings.output_file {
             let file = file.try_clone().map_err(|e| ExportError::Io(e.to_string()))?;
             return Ok(Out::File(std::io::BufWriter::new(file)));
@@ -446,7 +457,19 @@ impl Out {
     /// An output file at `path` (OP-Atom exports write several).
     fn create_path(settings: &ExportSettings, path: &str) -> Result<Out> {
         if settings.sink.is_some() {
+            if let Some(limit) = settings.target_size_bytes {
+                if limit > 256_000_000 {
+                    return Err(ExportError::Unsupported(
+                        "In-memory size-limited exports support at most 256 MB; use a desktop output file for larger exports".into(),
+                    ));
+                }
+                return Ok(Out::BoundedMem(std::io::Cursor::new(Vec::new()), limit.saturating_mul(2).max(8_000_000)));
+            }
             return Ok(Out::Mem(std::io::Cursor::new(Vec::new())));
+        }
+        if settings.target_size_bytes.is_some() {
+            let (file, guard) = size_limit::StagePath::create(path)?;
+            return Ok(Out::Staged(std::io::BufWriter::new(file), guard));
         }
         if path == settings.path
             && let Some(file) = &settings.output_file
@@ -469,7 +492,18 @@ impl Out {
                 w.flush().map_err(|e| ExportError::Io(e.to_string()))?;
                 Ok(std::fs::metadata(path).map(|m| m.len()).unwrap_or(0))
             }
-            Out::Mem(c) => write_output(settings, path, c.into_inner()),
+            Out::Mem(c) | Out::BoundedMem(c, _) => {
+                settings.check_output_size(c.get_ref().len() as u64)?;
+                write_output(settings, path, c.into_inner())
+            }
+            Out::Staged(mut w, guard) => {
+                w.flush().map_err(|e| ExportError::Io(e.to_string()))?;
+                let n = w.get_ref().metadata().map_err(|e| ExportError::Io(e.to_string()))?.len();
+                drop(w);
+                settings.check_output_size(n)?;
+                guard.publish(path)?;
+                Ok(n)
+            }
         }
     }
 }
@@ -488,14 +522,25 @@ fn write_output(settings: &ExportSettings, path: &str, data: Vec<u8>) -> Result<
 impl Write for Out {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         match self {
-            Out::File(w) => w.write(buf),
+            Out::File(w) | Out::Staged(w, _) => w.write(buf),
             Out::Mem(w) => w.write(buf),
+            Out::BoundedMem(w, cap) => {
+                let end = w
+                    .position()
+                    .checked_add(buf.len() as u64)
+                    .filter(|end| *end <= *cap)
+                    .and_then(|end| usize::try_from(end).ok())
+                    .ok_or_else(|| std::io::Error::other("Compressed export exceeds its memory budget; use a desktop output file"))?;
+                let additional = end.saturating_sub(w.get_ref().len());
+                w.get_mut().try_reserve(additional).map_err(std::io::Error::other)?;
+                w.write(buf)
+            }
         }
     }
     fn flush(&mut self) -> std::io::Result<()> {
         match self {
-            Out::File(w) => w.flush(),
-            Out::Mem(w) => w.flush(),
+            Out::File(w) | Out::Staged(w, _) => w.flush(),
+            Out::Mem(w) | Out::BoundedMem(w, _) => w.flush(),
         }
     }
 }
@@ -503,8 +548,8 @@ impl Write for Out {
 impl std::io::Seek for Out {
     fn seek(&mut self, pos: std::io::SeekFrom) -> std::io::Result<u64> {
         match self {
-            Out::File(w) => w.seek(pos),
-            Out::Mem(w) => w.seek(pos),
+            Out::File(w) | Out::Staged(w, _) => w.seek(pos),
+            Out::Mem(w) | Out::BoundedMem(w, _) => w.seek(pos),
         }
     }
 }
@@ -569,6 +614,7 @@ impl Default for ExportSettings {
             include_audio: true,
             quality: 90,
             bitrate_kbps: 20_000,
+            target_size_bytes: None,
             burn_captions: false,
             part_of_batch: false,
             prores_profile: String::new(),
@@ -617,6 +663,7 @@ fn default_crf() -> f32 {
 impl ExportSettings {
     /// Reject settings the encoders cannot honour.
     pub fn validate(&self) -> Result<()> {
+        self.validate_size_limit()?;
         if let Some(range) = self.range {
             validate_range(range)?;
         }

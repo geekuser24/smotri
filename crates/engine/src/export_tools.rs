@@ -469,6 +469,10 @@ pub fn spawn_export(s: &mut Session, project: Arc<Project>, seq: ItemId, mut set
     if !filmcraft_export::available(format) {
         return Err(EngineError::Other(format!("{} export is not available (no encoder registered)", format.label())));
     }
+    if settings.target_size_bytes.is_some() {
+        let range = filmcraft_export::export_range(&project, seq, &settings).map_err(|e| EngineError::Other(e.to_string()))?;
+        settings.fit_size_limit(range.duration).map_err(|e| EngineError::Other(e.to_string()))?;
+    }
     if s.services.export_in_memory() {
         let services = s.services.clone();
         settings.sink = Some(filmcraft_export::OutputSink(Arc::new(move |path: &str, data: Vec<u8>| services.write_file(path, &data))));
@@ -931,6 +935,7 @@ fn resolve(s: &mut Session, p: &Value) -> Result<Value> {
     let q = project.sequence(seq).ok_or(EngineError::NoSequence)?;
     let range = filmcraft_export::export_range(&project, seq, &settings).map_err(|e| EngineError::Other(e.to_string()))?;
     let (w, h, rate, sr) = (q.settings.width, q.settings.height, q.settings.frame_rate, q.settings.sample_rate);
+    settings.fit_size_limit(range.duration).map_err(|e| EngineError::Other(e.to_string()))?;
     let r = settings.resolve(w, h, rate, sr);
     let (f0, f1) = filmcraft_export::frame_span(r.rate, range);
     let summary = settings.summary(w, h, rate, sr, range.duration);

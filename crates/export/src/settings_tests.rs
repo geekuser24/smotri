@@ -1334,3 +1334,106 @@ fn own_importer_reads_32_bit_flac_at_full_scale() {
         }
     }
 }
+
+#[test]
+fn size_limit_budget_and_hostile_inputs() {
+    let mut s = ExportSettings { target_size_bytes: Some(20_000_000), ..Default::default() };
+    s.fit_size_limit(Tick(60 * TICKS_PER_SECOND)).unwrap();
+    assert_eq!((s.bitrate_kbps, s.audio.bitrate_kbps), (2427, 128));
+    assert_eq!(s.bitrate_mode, BitrateMode::Vbr2Pass);
+    assert_eq!(s.hardware_encoding, HardwareEncoding::Off);
+    let saved = serde_json::to_value(&s).unwrap();
+    assert_eq!(saved["targetSizeBytes"], 20_000_000);
+    assert_eq!(serde_json::from_value::<ExportSettings>(saved).unwrap().target_size_bytes, s.target_size_bytes);
+    for limit in [0, 1, 999_999, u64::MAX] {
+        s.target_size_bytes = Some(limit);
+        assert!(s.fit_size_limit(Tick(TICKS_PER_SECOND)).is_err());
+    }
+    s.target_size_bytes = Some(1_000_000);
+    for ticks in [0, -1, i64::MAX] {
+        assert!(s.fit_size_limit(Tick(ticks)).is_err());
+    }
+    s.format = Format::ProRes;
+    assert!(s.validate().is_err());
+}
+
+#[test]
+fn size_limit_staging_preserves_previous_file_and_sink() {
+    let dir = Scratch::new("size-stage");
+    let path = dir.path("old.mp4");
+    std::fs::write(&path, b"previous good export").unwrap();
+    let s = ExportSettings { path: path.clone(), target_size_bytes: Some(1_000_000), ..Default::default() };
+    let mut out = Out::create(&s).unwrap();
+    out.write_all(&vec![7; 1_000_001]).unwrap();
+    assert!(matches!(out.finish(&s), Err(ExportError::SizeLimit { .. })));
+    assert_eq!(std::fs::read(&path).unwrap(), b"previous good export");
+    let mut cancelled = Out::create(&s).unwrap();
+    cancelled.write_all(b"incomplete").unwrap();
+    drop(cancelled);
+    assert_eq!(std::fs::read_dir(&dir.0).unwrap().count(), 1);
+    let called = Arc::new(AtomicBool::new(false));
+    let flag = called.clone();
+    let mem = ExportSettings {
+        sink: Some(OutputSink(Arc::new(move |_, _| {
+            flag.store(true, Ordering::Relaxed);
+            Ok(())
+        }))),
+        ..s
+    };
+    let mut out = Out::create(&mem).unwrap();
+    out.write_all(&vec![7; 1_000_001]).unwrap();
+    assert!(matches!(out.finish(&mem), Err(ExportError::SizeLimit { .. })));
+    assert!(!called.load(Ordering::Relaxed));
+}
+
+#[test]
+fn size_limit_real_export_keeps_frames_audio_and_range() {
+    let (p, seq, m) = matte([0.2, 0.5, 0.8, 1.0], 160, 96, Some(-12.0));
+    let dir = Scratch::new("size-real");
+    let s = ExportSettings {
+        path: dir.path("limited.mp4"),
+        target_size_bytes: Some(1_000_000),
+        range: Some(TimeRange::new(FrameRate::FPS_24.tick_of(6), FrameRate::FPS_24.tick_of(12))),
+        ..Default::default()
+    };
+    let prog = Progress::default();
+    let report = export(&p, seq, &s, &m, &prog).unwrap();
+    assert_eq!(report.frames, 12);
+    assert!(report.bytes > 0 && report.bytes <= 1_000_000);
+    assert_eq!(std::fs::metadata(&s.path).unwrap().len(), report.bytes);
+    assert_eq!(prog.done.load(Ordering::Relaxed), 24);
+    let src = filmcraft_codecs::open_bytes("limited.mp4", std::fs::read(&s.path).unwrap().into()).unwrap();
+    assert!(src.video_frame(FrameRequest::full(Tick::ZERO)).is_ok());
+    assert!(src.audio(0, 2400, 48_000).is_ok());
+    if let Some(info) = ffprobe_json(&["-show_format", "-show_streams"], &s.path) {
+        let duration: f64 = info["format"]["duration"].as_str().unwrap().parse().unwrap();
+        assert!((duration - 0.5).abs() < 0.06, "{info}");
+        assert_eq!(info["streams"].as_array().unwrap().len(), 2);
+    }
+}
+
+#[test]
+fn size_limit_retries_are_bounded_and_do_not_publish_oversize() {
+    let (p, seq, m) = matte([0.2, 0.5, 0.8, 1.0], 32, 32, None);
+    let dir = Scratch::new("size-retry");
+    let path = dir.path("existing.mp4");
+    std::fs::write(&path, b"keep me").unwrap();
+    let s = ExportSettings {
+        path: path.clone(),
+        target_size_bytes: Some(1_000_000),
+        include_audio: false,
+        metadata: ExportMetadata { comment: "x".repeat(1_100_000), ..Default::default() },
+        ..Default::default()
+    };
+    let prog = Progress::default();
+    let error = export(&p, seq, &s, &m, &prog).unwrap_err();
+    assert!(matches!(error, ExportError::SizeLimit { .. }), "{error}");
+    assert_eq!(std::fs::read(&path).unwrap(), b"keep me");
+    assert_eq!(std::fs::read_dir(&dir.0).unwrap().count(), 1);
+    assert!(!prog.finished.load(Ordering::Relaxed));
+    let mut rate = s;
+    rate.bitrate_kbps = 200;
+    assert!(rate.lower_size_bitrate(1_100_000, 1_000_000));
+    assert_eq!(rate.bitrate_kbps, 170);
+    assert!(!rate.lower_size_bitrate(10_000_000, 1_000_000));
+}

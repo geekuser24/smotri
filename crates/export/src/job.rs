@@ -149,6 +149,7 @@ pub enum Step {
 /// An export of an encoded-video format, advanced one batch at a time.
 pub struct Exporter {
     pipe: Arc<Pipeline>,
+    size_attempt: u8,
     settings: ExportSettings,
     f0: i64,
     f1: i64,
@@ -216,10 +217,10 @@ fn make_venc(settings: &ExportSettings, w: u32, h: u32, rate: FrameRate) -> Resu
 impl Exporter {
     /// Set up an export (encoder, output size, colour signalling); sets `progress.total`.
     pub fn new(project: Arc<Project>, seq: ItemId, settings: &ExportSettings, progress: &Progress) -> Result<Self> {
-        timed(Stage::Setup, || Self::set_up(project, seq, settings, progress))
+        timed(Stage::Setup, || Self::set_up(project, seq, settings, progress, 0))
     }
 
-    fn set_up(project: Arc<Project>, seq: ItemId, settings: &ExportSettings, progress: &Progress) -> Result<Self> {
+    fn set_up(project: Arc<Project>, seq: ItemId, settings: &ExportSettings, progress: &Progress, size_attempt: u8) -> Result<Self> {
         if !stepped(settings.format) {
             return Err(ExportError::Unsupported(format!("{} is not a stepped export", settings.format.label())));
         }
@@ -235,6 +236,12 @@ impl Exporter {
             (true, _) => ColorSignal::HLG,
             _ => ColorSignal::default(),
         };
+        if size_attempt == 0 && settings.target_size_bytes.is_some() {
+            let range = export_range(&project, seq, &settings)?;
+            let rate = settings.frame_rate.unwrap_or(q.settings.frame_rate);
+            let (start, end) = frame_span(rate, range);
+            settings.fit_size_limit(rate.tick_of(end) - rate.tick_of(start))?;
+        }
         // bake the derived bitrate / keyframe values in for the encoder factories
         let r = settings.resolve(q.settings.width, q.settings.height, q.settings.frame_rate, q.settings.sample_rate);
         settings.bitrate_kbps = r.target_kbps;
@@ -265,6 +272,7 @@ impl Exporter {
         };
         let measured = !settings.effects.loudness.enabled || audio.is_none();
         Ok(Self {
+            size_attempt,
             pipe,
             f0,
             f1,
@@ -505,7 +513,29 @@ impl Exporter {
                     .ok_or_else(|| ExportError::Encode("internal: the container writer was not created".into()))?
                     .finish()
                     .map_err(|e| ExportError::Io(e.to_string()))?;
-                (w.finish(&self.settings)?, Vec::new())
+                if progress.cancel.load(Ordering::Relaxed) {
+                    return Err(ExportError::Cancelled);
+                }
+                let bytes = match w.finish(&self.settings) {
+                    Ok(bytes) => bytes,
+                    Err(ExportError::SizeLimit { actual, limit }) => {
+                        let mut settings = self.settings.clone();
+                        if self.size_attempt >= 2 || !settings.lower_size_bitrate(actual, limit) {
+                            return Err(ExportError::SizeLimit { actual, limit });
+                        }
+                        let mut retry = Self::set_up(self.project.clone(), self.seq, &settings, progress, self.size_attempt + 1)?;
+                        retry.batch = self.batch;
+                        retry.overlap = self.overlap;
+                        retry.budget = self.budget;
+                        retry.t0 = self.t0;
+                        progress.done.store(0, Ordering::Relaxed);
+                        progress.set_status(format!("Compressing to size: attempt {}/3", retry.size_attempt + 1));
+                        *self = retry;
+                        return Ok(Step::Progress);
+                    }
+                    Err(e) => return Err(e),
+                };
+                (bytes, Vec::new())
             }
         };
         note_stage(Stage::Finish, finishing.elapsed());

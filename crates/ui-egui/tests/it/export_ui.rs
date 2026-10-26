@@ -520,3 +520,43 @@ fn sample_size_lists_every_size_and_greys_out_what_the_format_cannot_store() {
     assert_eq!(d.app().ui.export.settings.audio.sample_format(), SampleFormat::Float32);
     d.snapshot("export-sample-size-prores");
 }
+
+#[test]
+fn export_size_limit_controls_resolve_and_queue() {
+    let mut d = Driver::new("size-limit");
+    d.ok("ui.set", json!({"mode":"export"}));
+    d.frames(3);
+    assert!(d.has("export.sizeLimit.enabled"));
+    d.click("export.sizeLimit.enabled");
+    assert!(d.has("export.sizeLimit.mb"));
+    assert_eq!(d.app().ui.export.settings.target_size_bytes, Some(20_000_000));
+    assert_eq!(d.app().ui.export.settings.bitrate_mode, filmcraft_engine::export::BitrateMode::Vbr2Pass);
+    d.ok("ui.set", json!({"export":{"settings":{"targetSizeBytes":5_000_000}}}));
+    d.frames(3);
+    let settings = serde_json::to_value(&d.app().ui.export.settings).unwrap();
+    let resolved = d.exec("export.resolve", json!({"settings":settings}));
+    assert_eq!(resolved["settings"]["targetSizeBytes"], 5_000_000);
+    assert!(resolved["output"]["targetKbps"].as_u64().unwrap() > 100);
+    d.click("export.sendToQueue");
+    assert_eq!(d.app().session.export_queue.items[0].settings.target_size_bytes, Some(5_000_000));
+    d.exec("prefs.set", json!({"key":"general.interfaceLanguage","value":"ru"}));
+    d.frames(3);
+    let mut labels = Vec::new();
+    fn texts(shape: &egui::Shape, out: &mut Vec<String>) {
+        match shape {
+            egui::Shape::Text(t) => out.push(t.galley.job.text.clone()),
+            egui::Shape::Vec(v) => v.iter().for_each(|s| texts(s, out)),
+            _ => {}
+        }
+    }
+    for shape in &d.harness.output().shapes {
+        texts(&shape.shape, &mut labels);
+    }
+    assert!(labels.iter().any(|text| text == "Сжать до"), "{labels:?}");
+    d.snapshot("export-size-limit-ru");
+    d.exec("prefs.set", json!({"key":"general.interfaceLanguage","value":"en"}));
+    d.frames(3);
+    d.snapshot("export-size-limit-en");
+    d.click("export.sizeLimit.enabled");
+    assert!(d.app().ui.export.settings.target_size_bytes.is_none());
+}
