@@ -43,6 +43,8 @@ pub struct Review {
     pub source: ItemId,
     pub snapshot: Arc<Project>,
     pub result: Arc<Mutex<Option<Analysis>>>,
+    /// Retained even when editorial scoring fails; never repeat paid transcription on retry.
+    pub transcript: Arc<Mutex<Option<Transcript>>>,
 }
 /// Only changes to the analyzed source or its dependencies invalidate the transcript.
 /// Saving, creating shorts and undoing their creation must not trigger another paid transcription.
@@ -117,34 +119,53 @@ pub fn validate(proposals: &[Proposal], duration_ms: i64, max_seconds: u32) -> R
     Ok(())
 }
 
-/// Accept only real spoken ranges. Align millisecond model estimates to word boundaries.
-fn align_proposals(proposals: &mut [Proposal], tr: &Transcript, max_seconds: u32) -> Result<()> {
+/// Model times are editorial estimates, not sample-accurate cut points. Keep complete
+/// overlapping words, trim boundary silence and fit the result to the duration budget.
+/// One unusable suggestion must not discard the remaining valid suggestions.
+fn align_proposals(proposals: &mut Vec<Proposal>, tr: &Transcript, max_seconds: u32, duration_ms: i64) -> Result<()> {
     if proposals.len() > 20 || tr.words.len() > 100_000 {
         return Err(err("Analysis is too large"));
     }
-    for p in proposals {
-        if p.start_ms < 0 || p.end_ms <= p.start_ms {
-            return Err(err("Invalid model timestamps"));
+    let max_ms = i64::from(max_seconds) * 1000;
+    let mut words: Vec<_> = tr
+        .words
+        .iter()
+        .filter_map(|w| {
+            let a = w.start.to_units_floor(1000);
+            let b = w.end.to_units_floor(1000);
+            (a >= 0 && b > a && b <= duration_ms && !w.text.trim().is_empty()).then_some((a, b))
+        })
+        .collect();
+    words.sort_unstable();
+    let mut seen = std::collections::BTreeSet::new();
+    proposals.retain_mut(|p| {
+        // Permit small rounding overshoots only. Never turn arbitrary/out-of-source
+        // model timestamps into plausible-looking clips somewhere else in the video.
+        if p.start_ms < 0
+            || p.end_ms <= p.start_ms
+            || p.start_ms >= duration_ms
+            || p.end_ms > duration_ms.saturating_add(2000)
+            || p.end_ms.saturating_sub(p.start_ms) > max_ms.saturating_add(2000)
+        {
+            return false;
         }
-        let first = tr
-            .words
+        let Some(&(a, first_end)) = words.iter().find(|&&(a, b)| b > p.start_ms && a < p.end_ms) else {
+            return false;
+        };
+        let Some(b) = words
             .iter()
-            .filter(|w| w.end > w.start && w.start >= Tick::ZERO)
-            .min_by_key(|w| w.start.to_units_floor(1000).abs_diff(p.start_ms))
-            .ok_or_else(|| err("No usable words"))?;
-        let last = tr
-            .words
-            .iter()
-            .filter(|w| w.end > w.start && w.end > first.start)
-            .min_by_key(|w| w.end.to_units_floor(1000).abs_diff(p.end_ms))
-            .ok_or_else(|| err("No usable end word"))?;
-        let a = first.start.to_units_floor(1000);
-        let b = last.end.to_units_floor(1000);
-        if a.abs_diff(p.start_ms) > 500 || b.abs_diff(p.end_ms) > 500 || b - a > i64::from(max_seconds) * 1000 {
-            return Err(err("Model timestamps do not match complete words; retry analysis"));
-        }
+            .filter(|&&(start, end)| start >= a && start < p.end_ms && end >= first_end && end <= a.saturating_add(max_ms))
+            .map(|&(_, end)| end)
+            .max()
+        else {
+            return false;
+        };
         p.start_ms = a;
         p.end_ms = b;
+        validate(std::slice::from_ref(p), duration_ms, max_seconds).is_ok() && seen.insert((a, b))
+    });
+    if proposals.is_empty() {
+        return Err(err("No complete spoken fragments fit the selected duration. Try another duration or sequence."));
     }
     Ok(())
 }
@@ -181,7 +202,7 @@ fn analyze(s: &mut Session, p: &Value) -> Result<Value> {
         .shorts
         .as_ref()
         .filter(|r| r.source == source && context_matches(&r.snapshot, &s.project, source))
-        .and_then(|r| lock(&r.result).as_ref().map(|a| a.transcript.clone()));
+        .and_then(|r| lock(&r.transcript).clone().or_else(|| lock(&r.result).as_ref().map(|a| a.transcript.clone())));
     seq.settings.sample_rate = 16000;
     let snapshot = s.project.clone();
     let worker_snapshot = snapshot.clone();
@@ -196,6 +217,8 @@ fn analyze(s: &mut Session, p: &Value) -> Result<Value> {
     let result = job.result.clone();
     let output = Arc::new(Mutex::new(None));
     let out = output.clone();
+    let transcript = Arc::new(Mutex::new(cached.clone()));
+    let transcript_out = transcript.clone();
     let run = move || {
         let work = || -> Result<Analysis> {
             prog.total.store(100, Ordering::Relaxed);
@@ -230,9 +253,10 @@ fn analyze(s: &mut Session, p: &Value) -> Result<Value> {
             if tr.words.is_empty() {
                 return Err(err("No speech found"));
             }
+            *lock(&transcript_out) = Some(tr.clone());
             *lock(&prog.status) = "OpenAI: evaluating fragments".into();
             let mut proposals = analyst.analyze(&tr, max as u32, &prog.cancel).map_err(err)?;
-            align_proposals(&mut proposals, &tr, max as u32)?;
+            align_proposals(&mut proposals, &tr, max as u32, seq.duration().to_units_floor(1000))?;
             if prog.cancel.load(Ordering::Acquire) {
                 return Err(err("Cancelled"));
             }
@@ -257,7 +281,7 @@ fn analyze(s: &mut Session, p: &Value) -> Result<Value> {
     std::thread::Builder::new().name("Shorts analysis".into()).spawn(run).map_err(|e| err(e.to_string()))?;
     let id = job.id;
     s.jobs.push(job);
-    s.shorts = Some(Review { max_seconds: max as u32, job: id, source, snapshot, result: output });
+    s.shorts = Some(Review { max_seconds: max as u32, job: id, source, snapshot, result: output, transcript });
     Ok(json!({"job":id}))
 }
 #[derive(Clone, Serialize, Deserialize)]
@@ -633,6 +657,7 @@ mod tests {
             job: 0,
             source,
             snapshot: s.project.clone(),
+            transcript: Arc::new(Mutex::new(Some(transcript.clone()))),
             result: Arc::new(Mutex::new(Some(Analysis {
                 transcript,
                 proposals: vec![Proposal {
@@ -708,17 +733,55 @@ mod tests {
         let mut p = a.proposals.clone();
         p[0].start_ms = 1100;
         p[0].end_ms = 2900;
-        align_proposals(&mut p, &a.transcript, 30).unwrap();
+        align_proposals(&mut p, &a.transcript, 30, 10000).unwrap();
         assert_eq!((p[0].start_ms, p[0].end_ms), (1000, 3000));
         for (start, end) in [(-1, 3000), (0, i64::MAX), (3000, 2000), (1000, 31000)] {
+            p = a.proposals.clone();
             p[0].start_ms = start;
             p[0].end_ms = end;
-            assert!(align_proposals(&mut p, &a.transcript, 30).is_err());
+            assert!(align_proposals(&mut p, &a.transcript, 30, 10000).is_err());
         }
-        p[0].start_ms = 1000;
-        p[0].end_ms = 3000;
+        p = a.proposals.clone();
         p[0].score = 101;
         assert!(validate(&p, 10000, 30).is_err());
+    }
+    #[test]
+    fn rounded_limit_and_silent_boundaries_keep_complete_words() {
+        let tr = Transcript {
+            words: (0..61).map(|i| Word::new("word", Tick::from_units(i * 1000 + 100, 1000), Tick::from_units(i * 1000 + 900, 1000))).collect(),
+            ..Default::default()
+        };
+        let proposal = |start_ms, end_ms| Proposal { start_ms, end_ms, title: "Test".into(), score: 70, reason: "Phrase".into() };
+        // The model used a 60s window; snapping outward would make it 60.8s.
+        let mut p = vec![proposal(500, 60500), proposal(-1, 2000), proposal(500, i64::MAX)];
+        align_proposals(&mut p, &tr, 60, 61000).unwrap();
+        assert_eq!(p.len(), 1);
+        assert_eq!((p[0].start_ms, p[0].end_ms), (100, 59900));
+        validate(&p, 61000, 60).unwrap();
+        // Silence longer than the previous 500ms tolerance is harmless.
+        let tr = Transcript { words: vec![Word::new("Phrase", Tick::from_units(2200, 1000), Tick::from_units(4500, 1000))], ..Default::default() };
+        let mut p = vec![proposal(0, 6000)];
+        align_proposals(&mut p, &tr, 30, 7000).unwrap();
+        assert_eq!((p[0].start_ms, p[0].end_ms), (2200, 4500));
+        let mut p = vec![proposal(5000, 6000)];
+        assert!(align_proposals(&mut p, &tr, 30, 7000).is_err());
+    }
+    #[test]
+    fn aligned_suggestions_create_captioned_sequences_within_limit() {
+        let mut s = fixture();
+        {
+            let mut result = lock(&s.shorts.as_ref().unwrap().result);
+            let a = result.as_mut().unwrap();
+            a.proposals[0].start_ms = 0;
+            a.proposals[0].end_ms = 4000;
+            align_proposals(&mut a.proposals, &a.transcript, 30, 10000).unwrap();
+        }
+        let made = s.execute("shorts.create", json!({"selected":[0]})).unwrap();
+        let q = s.project.sequence(ItemId(made["sequences"][0].as_u64().unwrap())).unwrap();
+        assert!(q.duration() >= Tick(2 * TICKS_PER_SECOND));
+        assert!(q.duration() <= Tick(2 * TICKS_PER_SECOND) + Tick(q.settings.frame_rate.frame_duration().0 * 2));
+        assert_eq!(q.caption_tracks[0].captions.len(), 2);
+        q.check().unwrap();
     }
     #[test]
     fn every_layout_renders_all_frame_formats() {
@@ -774,6 +837,57 @@ mod tests {
         }
         fn analyze(&self, _: &Transcript, _: u32, _: &AtomicBool) -> std::result::Result<Vec<Proposal>, String> {
             Ok(vec![Proposal { start_ms: 100, end_ms: 600, title: "Test".into(), score: 50, reason: "Complete phrase".into() }])
+        }
+    }
+    struct FailingAnalyst;
+    impl Analyst for FailingAnalyst {
+        fn configured(&self) -> bool {
+            true
+        }
+        fn save_key(&self, _: &str) -> std::result::Result<(), String> {
+            Ok(())
+        }
+        fn analyze(&self, _: &Transcript, _: u32, _: &AtomicBool) -> std::result::Result<Vec<Proposal>, String> {
+            Err("Temporary scoring failure".into())
+        }
+    }
+    #[test]
+    fn scoring_failure_keeps_transcription_for_retry() {
+        let mut s = fixture();
+        s.shorts = None;
+        s.shorts_analyst = Some(Arc::new(FailingAnalyst));
+        s.transcriber = Some(Arc::new(filmcraft_speech::FixedTranscriber {
+            id: "fixed".into(),
+            transcript: Transcript { words: vec![Word::new("Hello", Tick::from_units(100, 1000), Tick::from_units(600, 1000))], ..Default::default() },
+        }));
+        let source = s.state.active_sequence.unwrap();
+        let q = Arc::make_mut(&mut s.project).sequence_mut(source).unwrap();
+        for t in q.all_tracks_mut() {
+            t.items.truncate(1);
+            for c in &mut t.items {
+                c.start = Tick::ZERO;
+                c.duration = Tick(TICKS_PER_SECOND);
+            }
+        }
+        q.markers.clear();
+        for attempt in 0..2 {
+            s.execute("shorts.analyze", json!({"duration":30})).unwrap();
+            let deadline = web_time::Instant::now() + std::time::Duration::from_secs(30);
+            while !s.jobs.last().unwrap().progress.finished.load(Ordering::Acquire) && web_time::Instant::now() < deadline {
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+            let state = s.execute("shorts.status", json!({})).unwrap();
+            assert_eq!(state["finished"], true);
+            if attempt == 0 {
+                assert!(state["error"].as_str().unwrap().contains("Temporary scoring failure"));
+                assert!(s.execute("shorts.create", json!({"selected":[0]})).is_err());
+                s.shorts_analyst = Some(Arc::new(FixedAnalyst));
+                // Retrying transcription would yield no words and fail.
+                s.transcriber = Some(Arc::new(filmcraft_speech::FixedTranscriber { id: "empty".into(), transcript: Transcript::default() }));
+            } else {
+                assert!(state["error"].is_null(), "{state}");
+                assert_eq!(state["proposals"].as_array().unwrap().len(), 1);
+            }
         }
     }
     #[test]
