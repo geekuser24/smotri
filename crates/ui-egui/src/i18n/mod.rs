@@ -473,6 +473,12 @@ mod tests {
         out
     }
 
+    #[test]
+    fn russian_covers_registered_interface_strings() {
+        let missing: Vec<_> = interface_strings().into_iter().filter(|s| !Language::Ru.has(s)).collect();
+        assert!(missing.is_empty(), "Russian interface strings missing: {missing:?}");
+    }
+
     /// The missing-translations report. It always passes: a string a catalog lacks shows in
     /// English. `cargo xtask ci` runs it with `--nocapture` so the list shows in the gate log
     /// (`cargo xtask i18n-report` runs it alone). Per language it lists the interface strings the
@@ -557,9 +563,11 @@ mod tests {
         let mut out = Vec::new();
         let mut rest = text;
         loop {
-            let next = ["tl!(\"", "tlf!(\""].into_iter().filter_map(|p| Some((rest.find(p)?, p.len()))).min();
+            let next = ["tl!(", "tlf!("].into_iter().filter_map(|p| Some((rest.find(p)?, p.len()))).min();
             let Some((at, len)) = next else { break };
-            rest = &rest[at + len..];
+            rest = rest[at + len..].trim_start();
+            let Some(tail) = rest.strip_prefix('"') else { continue };
+            rest = tail;
             let mut lit = String::new();
             let mut chars = rest.char_indices();
             let mut end = rest.len();

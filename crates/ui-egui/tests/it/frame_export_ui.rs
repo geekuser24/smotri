@@ -161,6 +161,14 @@ fn depth_dropdown_is_format_aware_and_existing_files_require_confirmation() {
     let out = folder.clone();
     h.state_mut().hooks.pick_folder = Some(Box::new(move || Some(out.to_string_lossy().into_owned())));
     click(&mut h, "exportFrame.browse");
+    assert!(h.state().auto.elements.iter().any(|e| e.id == "exportFrame.name" && e.label == "Source clip (1)"));
+    // Explicitly requesting the occupied name must still require confirmation.
+    click(&mut h, "exportFrame.name");
+    h.input_mut().events.extend([
+        egui::Event::Key { key: egui::Key::A, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::COMMAND },
+        egui::Event::Text("Source clip".into()),
+    ]);
+    step(&mut h);
     click(&mut h, "exportFrame.export");
     assert!(has(&h, "exportFrame.replace"));
     assert_eq!(std::fs::read(&path).unwrap(), b"keep me");
@@ -292,4 +300,34 @@ fn clicking_outside_dismisses_without_export_and_dropdowns_stay_open() {
     }
     step(&mut h);
     assert!(!has(&h, "exportFrame.name"), "clicking the background monitor must cancel the draft");
+}
+
+#[test]
+fn keyboard_export_enter_and_reopen_offer_a_unique_name() {
+    let mut h = harness();
+    h.state_mut().ui.focused = PanelKind::Timeline;
+    let folder = std::env::temp_dir().join(format!("fc-frame-unique-ui-{}", std::process::id()));
+    std::fs::create_dir_all(&folder).unwrap();
+    h.state_mut().session.path = Some(folder.join("demo.fcproj").to_string_lossy().into_owned());
+    let key = |key, modifiers| egui::Event::Key { key, physical_key: Some(key), pressed: true, repeat: false, modifiers };
+    h.input_mut().events.push(key(egui::Key::E, egui::Modifiers::ALT | egui::Modifiers::SHIFT));
+    step(&mut h);
+    step(&mut h);
+    assert!(has(&h, "exportFrame.name"));
+    // Enter also works while editing the name; it must not reach timeline commands.
+    click(&mut h, "exportFrame.name");
+    h.input_mut().events.push(key(egui::Key::Enter, egui::Modifiers::NONE));
+    step(&mut h);
+    step(&mut h);
+    assert!(folder.join("Program clip.png").is_file(), "{}", h.state().ui.status);
+    assert!(!has(&h, "exportFrame.name"));
+    let ctx = h.ctx.clone();
+    menus::invoke(h.state_mut(), &ctx, "file.exportFrame", json!({"monitor":"program"})).unwrap();
+    step(&mut h);
+    assert!(h.state().auto.elements.iter().any(|e| e.id == "exportFrame.name" && e.label == "Program clip (1)"));
+    h.input_mut().events.push(key(egui::Key::Enter, egui::Modifiers::NONE));
+    step(&mut h);
+    assert!(folder.join("Program clip (1).png").is_file());
+    drop(h);
+    std::fs::remove_dir_all(folder).unwrap();
 }

@@ -133,6 +133,8 @@ pub struct HostHooks {
     pub pick_files: Option<Box<dyn FnMut(&[&str]) -> Vec<String>>>,
     /// The cursor in physical screen pixels. Where the windowing layer reports no pointer while files are dragged in from the OS (Windows), a drop is placed where this says it landed.
     pub cursor_screen_position: Option<Box<dyn Fn() -> Option<(i32, i32)>>>,
+    /// Cursor in native logical content-view points, top-left origin (macOS OS file drags).
+    pub cursor_window_position: Option<Box<dyn Fn() -> Option<(f64, f64)>>>,
     pub pick_save: Option<Box<dyn FnMut(&str) -> Option<String>>>,
     pub pick_open_project: Option<Box<dyn FnMut() -> Option<String>>>,
     /// Save dialog with a filter: (filter name, extensions, suggested file name) → path. The
@@ -1503,7 +1505,7 @@ impl FilmcraftApp {
         } else {
             None
         };
-        let dropped = ctx.input(|i| i.raw.dropped_files.clone());
+        let dropped = ctx.input_mut(|i| std::mem::take(&mut i.raw.dropped_files));
         let mut paths = Vec::new();
         for f in dropped {
             let p = f.path();
@@ -1514,6 +1516,9 @@ impl FilmcraftApp {
         if !paths.is_empty() {
             let pointer = self.drop_pointer(ctx);
             let imported = self.session.execute("file.import", json!({"paths": paths, "bin": self.import_bin().0}));
+            if let Err(e) = &imported {
+                self.ui.status = e.to_string();
+            }
             if let Ok(v) = imported
                 && let Some(pos) = pointer
                 && self.session.prefs.timeline.drop_import_to_timeline
@@ -1530,6 +1535,15 @@ impl FilmcraftApp {
     /// Where files dragged in from the OS are over the window. The OS reports no cursor motion during such a drag
     /// (winit, Windows), so ask it through the host hook, else use the last pointer position egui saw.
     fn drop_pointer(&self, ctx: &egui::Context) -> Option<egui::Pos2> {
+        if let Some((x, y)) = self.hooks.cursor_window_position.as_ref().and_then(|f| f()) {
+            let zoom = ctx.zoom_factor();
+            if x.is_finite() && y.is_finite() && zoom.is_finite() && zoom > 0.0 {
+                let p = egui::pos2((x / f64::from(zoom)) as f32, (y / f64::from(zoom)) as f32);
+                if p.is_finite() {
+                    return Some(p);
+                }
+            }
+        }
         let os_pointer = self
             .hooks
             .cursor_screen_position
@@ -1568,6 +1582,9 @@ impl FilmcraftApp {
     }
 
     fn handle_shortcuts(&mut self, ctx: &egui::Context) {
+        if panels::frame_export::is_open(ctx) {
+            return;
+        }
         let workspaces = (dock::names(&self.workspaces), self.ui.workspace.clone());
         if self.bindings_rev != self.session.shortcuts.revision || workspaces != self.menu_workspaces {
             self.menu_workspaces = workspaces;
@@ -1872,6 +1889,12 @@ impl FilmcraftApp {
                 // control-only mode ignores native menu commands, but Quit stays available (#1943)
                 if self.control_input_only && id != "app.quit" {
                     continue;
+                }
+                if matches!(id.as_str(), "edit.paste" | "edit.pasteInsert" | "edit.pasteAttributes") {
+                    // macOS menu key equivalents consume Cmd+V down, but winit can still
+                    // deliver V up. Do not synthesize a second Paste for that same gesture.
+                    self.v_down = true;
+                    ctx.input_mut(|i| i.events.retain(|e| !matches!(e, egui::Event::Paste(_) | egui::Event::Key { key: egui::Key::V, pressed: true, .. })));
                 }
                 if let Err(e) = menus::invoke(self, &ctx, &id, json!({})) {
                     self.ui.status = e;

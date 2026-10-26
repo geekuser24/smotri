@@ -740,3 +740,42 @@ fn inserts_clipboard_option_has_cancel_and_save_semantics() {
     assert!(!d.harness.state().session.prefs.clipboard.add_to_timeline);
     assert!(d.harness.state().session.prefs.inserts.add_to_timeline);
 }
+
+#[test]
+fn russian_settings_and_frame_export_switch_back_to_english() {
+    fn texts(d: &Driver) -> Vec<String> {
+        fn walk(shape: &egui::Shape, out: &mut Vec<String>) {
+            match shape {
+                egui::Shape::Text(text) => out.push(text.galley.job.text.clone()),
+                egui::Shape::Vec(shapes) => shapes.iter().for_each(|s| walk(s, out)),
+                _ => {}
+            }
+        }
+        let mut out = Vec::new();
+        d.harness.output().shapes.iter().for_each(|s| walk(&s.shape, &mut out));
+        out
+    }
+    let mut d = Driver::demo();
+    for (language, general, hardware, device, export, import) in [
+        ("ru", "Основные", "Аудиооборудование", "Тип устройства:", "Экспортировать кадр", "Импортировать в проект"),
+        ("en", "General", "Audio Hardware", "Device Class:", "Export Frame", "Import into project"),
+    ] {
+        d.exec("prefs.set", json!({"key":"general.interfaceLanguage", "value":language}));
+        d.frames(3);
+        d.menu("app.settings.audioHardware");
+        let labels = texts(&d);
+        for expected in [general, hardware, device] {
+            assert!(labels.iter().any(|l| l == expected), "{language}: missing {expected}, got {labels:?}");
+        }
+        d.shot(&format!("{language}-audio-hardware"));
+        d.click("settings.cancel");
+        d.harness.state_mut().ui.focused = filmcraft_ui_egui::dock::PanelKind::Program;
+        d.menu("file.exportFrame");
+        let labels = texts(&d);
+        for expected in [export, import] {
+            assert!(labels.iter().any(|l| l == expected), "{language}: missing {expected}, got {labels:?}");
+        }
+        d.shot(&format!("{language}-export-frame"));
+        d.click("exportFrame.cancel");
+    }
+}

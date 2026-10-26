@@ -325,3 +325,26 @@ fn clipboard_without_sequence_imports_and_bad_payload_does_not_edit() {
         assert_eq!(serde_json::to_value(&d.app().session.project).unwrap(), before);
     }
 }
+
+#[test]
+fn native_paste_followed_by_key_release_imports_once_and_next_paste_still_works() {
+    for same_frame in [true, false] {
+        let mut d = Driver::demo(if same_frame { "native-same" } else { "native-next" });
+        d.app().ui.focused = filmcraft_ui_egui::dock::PanelKind::Timeline;
+        d.app().session.set_playhead(filmcraft_time::Tick::from_seconds_f64(60.0));
+        let asked = d.clipboard(Some(red_image));
+        let (tx, rx) = channel();
+        d.app().command_inbox = Some(rx);
+        let before = d.clips().len();
+        for n in 1..=2 {
+            tx.send("edit.paste".into()).unwrap();
+            if !same_frame {
+                d.frames(2);
+            }
+            d.ctrl_v_without_text(egui::Modifiers::COMMAND);
+            assert_eq!(asked.get(), n, "one clipboard read per native menu gesture");
+            assert_eq!(d.clips().len(), before + n);
+            assert!(d.dir.join(format!("Pasted Image {n}.png")).is_file());
+        }
+    }
+}

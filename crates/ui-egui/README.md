@@ -28,8 +28,7 @@ the committed span and undo. Set `FILMCRAFT_UI_SNAPSHOT_DIR` to render screensho
 ## Localisation
 
 Edit > Language offers English, Japanese, Spanish, Brazilian Portuguese, Ukrainian, Simplified
-Chinese, German, Russian, French, Indonesian, Korean and Italian (all but Ukrainian and Russian cover
-the whole interface; those two cover the core menus). The language is stored in the engine's `general.interfaceLanguage` preference,
+Chinese, German, Russian, French, Indonesian, Korean and Italian. The language is stored in the engine's `general.interfaceLanguage` preference,
 restored on startup, and also available in Settings > General.
 Its default, System Language (`system`), follows the operating system: the first of the user's
 preferred languages that the interface has (the host supplies them through
@@ -46,10 +45,11 @@ original work using ordinary language, without proprietary localisation resource
 Spanish, Japanese, Simplified Chinese, French, Brazilian Portuguese and German cover menus, panels, dialogs, settings and registry labels. Searches accept both the
 translated label and its English source, including Unicode capitals. Project content, command ids
 and preference values retain their original values. Engine errors, CLI and MCP messages remain
-English. Ukrainian and Russian currently cover the core menus; they fall back to English elsewhere.
+English. Russian covers every registered interface string, with a regression gate for new omissions.
+Ukrainian currently covers the core menus and falls back to English elsewhere.
 
-A string a catalog lacks shows in English, so a missing translation never fails a test or a
-build. `cargo xtask i18n-report` prints each language's missing strings (menus, `tl!` literals and
+A string a catalog lacks shows in English. The Russian coverage test prevents new omissions;
+other catalogs remain best-effort. `cargo xtask i18n-report` prints each language's missing strings (menus, `tl!` literals and
 registry names) and its entries whose source the interface no longer has; `cargo xtask ci` prints
 the same report in its log.
 

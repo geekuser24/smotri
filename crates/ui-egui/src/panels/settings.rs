@@ -1016,7 +1016,7 @@ mod tests {
         app.session.execute("prefs.set", json!({"key": "appearance.favoriteThemes", "value": ["light", "dark"]})).unwrap();
         let mut h = Harness::builder().with_size(vec2(400.0, 240.0)).build_ui_state(
             |ui, app| {
-                ui.button("Appearance").context_menu(|ui| appearance_context_menu(app, ui));
+                ui.button(tl!("Appearance")).context_menu(|ui| appearance_context_menu(app, ui));
             },
             app,
         );

@@ -801,11 +801,11 @@ pub fn commands() -> Vec<CommandSpec> {
         spec("graphics.nudgeUp5", "Nudge Selected Object up by five", None, "{}", has_graphic_or_selection, |s, _| nudge_object(s, 0.0, -5.0)),
         spec("graphics.nudgeDown5", "Nudge Selected Object down by five", None, "{}", has_graphic_or_selection, |s, _| nudge_object(s, 0.0, 5.0)),
         // ---- export frame, poster frame
-        // Shift+E is Clip > Enable in FilmCraft Default; the Premiere preset moves it here
+        // Keep Shift+E for Clip > Enable; use an unoccupied default chord.
         spec(
             "file.exportFrame",
             "Export Frame",
-            None,
+            Some("Alt+Shift+E"),
             r#"{"path":str?,"format":"png|jpeg|tiff|bmp"?,"depth":8|16?,"import":bool?,"target":"source|program"?,"item":id?,"sequence":id?,"time":ticks?}"#,
             always,
             export_frame,

@@ -296,9 +296,9 @@ pub fn show(app: &mut FilmcraftApp, ui: &mut egui::Ui, rect: Rect) {
                             .size(11.0),
                         );
                         ui.horizontal(|ui| {
-                            let ok = ui.button("Download");
+                            let ok = ui.button(tl!("Download"));
                             auto.add("tts.download.confirm", visible(ui, ok.rect), "Download");
-                            let no = ui.button("Cancel");
+                            let no = ui.button(tl!("Cancel"));
                             if ok.clicked() {
                                 actions.push(Action::Download);
                             }
@@ -360,7 +360,7 @@ pub fn show(app: &mut FilmcraftApp, ui: &mut egui::Ui, rect: Rect) {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 let (ir, i) = ui.allocate_exact_size(vec2(14.0, 14.0), Sense::hover());
                 icons::paint(ui.painter(), ir, Icon::Info, t.text_faint);
-                i.on_hover_text("Add pause inserts [pause 1s]. Change the number for a longer or shorter pause, e.g. [pause 500ms] or [pause 2s].");
+                i.on_hover_text(tl!("Add pause inserts [pause 1s]. Change the number for a longer or shorter pause, e.g. [pause 500ms] or [pause 2s]."));
                 let b = ui.small_button("Add pause");
                 auto.add("tts.addPause", visible(ui, b.rect), "Add pause");
                 if b.clicked() {

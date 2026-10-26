@@ -5,4 +5,4 @@ source:       original work
 license:      MIT OR Apache-2.0
 license-file: LICENSE-MIT and LICENSE-APACHE
 added:        2026-10-10 by grib_job
-notes:        Original English-to-Russian menu translations using clean-room NLE vocabulary.
+notes:        Original English-to-Russian translations using clean-room NLE vocabulary. Expanded in October 2026 to registered settings, panels, effect parameters and dialogs; machine-assisted draft reviewed and corrected for editing terminology.

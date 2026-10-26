@@ -1048,7 +1048,10 @@ fn transport(app: &mut FilmcraftApp, ui: &mut egui::Ui, row: Rect, which: Which)
 
 fn transport_button(app: &mut FilmcraftApp, ui: &mut egui::Ui, rect: Rect, prefix: &str, icon: Icon, command: &str, label: &str) -> bool {
     let t = app.tokens;
-    let response = ui.interact(rect, egui::Id::new((prefix, command)), Sense::click()).on_hover_text(label);
+    let shortcut =
+        (command == "exportFrame").then(|| app.session.shortcuts.bindings.iter().find(|b| b.command == "file.exportFrame" && b.panel.is_none())).flatten();
+    let tip = shortcut.map(|b| format!("{label} ({})", crate::menus::shortcut_text(&b.keys))).unwrap_or_else(|| label.to_string());
+    let response = ui.interact(rect, egui::Id::new((prefix, command)), Sense::click()).on_hover_text(tip);
     app.auto.add_response(&format!("{prefix}.transport.{command}"), &response, label);
     if response.hovered() {
         ui.painter().rect_filled(rect, 4.0, t.hover);

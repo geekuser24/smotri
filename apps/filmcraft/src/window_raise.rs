@@ -26,3 +26,18 @@ pub fn raise_without_focus() -> bool {
         false
     }
 }
+
+/// Cocoa does not deliver ordinary pointer moves during a Finder drag. Query the
+/// content view directly; logical points avoid Retina and mixed-monitor scaling errors.
+#[cfg(target_os = "macos")]
+pub fn cursor_window_position() -> Option<(f64, f64)> {
+    let mtm = objc2::MainThreadMarker::new()?;
+    let app = objc2_app_kit::NSApplication::sharedApplication(mtm);
+    let window = app.keyWindow().or_else(|| app.mainWindow())?;
+    let view = window.contentView()?;
+    let point = view.convertPoint_fromView(window.mouseLocationOutsideOfEventStream(), None);
+    let bounds = view.bounds();
+    let x = point.x - bounds.origin.x;
+    let y = if view.isFlipped() { point.y - bounds.origin.y } else { bounds.origin.y + bounds.size.height - point.y };
+    (x.is_finite() && y.is_finite()).then_some((x, y))
+}

@@ -259,7 +259,7 @@ pub fn settings_page(app: &mut FilmcraftApp, ui: &mut egui::Ui, values: &mut Val
     ui.add_space(12.);
     let configured = app.inserts.host.as_ref().is_some_and(|h| h.has_key());
     ui.label(i18n::t(if configured { "API key configured" } else { "API key not configured" }));
-    ui.label("GIPHY API key");
+    ui.label(tl!("GIPHY API key"));
     let r = ui.add(
         egui::TextEdit::singleline(&mut app.inserts.key).password(true).hint_text(i18n::t("Enter a new key to replace the saved key")).desired_width(420.),
     );

@@ -773,7 +773,7 @@ pub(crate) fn clarification_command(app: &mut FilmcraftApp, ctx: &egui::Context,
 pub fn shared_key_ui(app: &mut FilmcraftApp, ui: &mut egui::Ui) {
     let configured = app.jarvis.host.as_ref().is_some_and(|h| h.has_key());
     ui.label(i18n::t(if configured { "API key configured" } else { "API key not configured" }));
-    ui.label("ElevenLabs API key");
+    ui.label(tl!("ElevenLabs API key"));
     let hint = i18n::t(if configured { "Enter a new key to replace the saved key" } else { "Enter your ElevenLabs API key" });
     let r = ui.add_enabled(!app.jarvis.active, egui::TextEdit::singleline(&mut app.jarvis.key).password(true).hint_text(hint).desired_width(420.0));
     app.auto.add("jarvis.apiKey", r.rect, "ElevenLabs API key");

@@ -327,3 +327,21 @@ fn os_cursor_hook_selects_destination_when_egui_pointer_has_no_motion() {
     step(&mut h);
     assert_eq!(clip_counts(&h), (1, 0));
 }
+
+#[test]
+fn native_content_pointer_places_finder_drop_when_egui_has_no_pointer() {
+    for empty in [true, false] {
+        let mut h = if empty { empty_harness() } else { harness() };
+        let at = if empty { control_rect(&h, "panel.Timeline").center() } else { point_on_row(&h, "timeline.track.V1.target") };
+        // Finder can suppress pointer motion and leave egui outside the window.
+        h.input_mut().events.push(egui::Event::PointerGone);
+        step(&mut h);
+        let zoom = f64::from(h.ctx.zoom_factor());
+        h.state_mut().hooks.cursor_window_position = Some(Box::new(move || Some((f64::from(at.x) * zoom, f64::from(at.y) * zoom))));
+        h.input_mut().dropped_files.push(std::sync::Arc::new(OsFile(still(if empty { "finder-empty.png" } else { "finder-sequence.png" }))));
+        step(&mut h);
+        h.input_mut().dropped_files.clear();
+        step(&mut h);
+        assert_eq!(clip_counts(&h), (1, 0), "{}", h.state().ui.status);
+    }
+}
