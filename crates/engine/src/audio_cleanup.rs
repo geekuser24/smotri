@@ -8,6 +8,8 @@ use filmcraft_time::{Tick, TimeRange};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::sync::{Arc, Mutex, atomic::Ordering};
+mod matching;
+
 fn err(s: impl Into<String>) -> EngineError {
     EngineError::Other(s.into())
 }
@@ -24,6 +26,8 @@ pub struct Take {
 pub struct Group {
     pub takes: Vec<Take>,
     pub resolved: bool,
+    #[serde(default)]
+    pub similarity_percent: f64,
 }
 #[derive(Clone, Serialize, Deserialize, Default)]
 pub struct Analysis {
@@ -32,6 +36,10 @@ pub struct Analysis {
     pub threshold_db: f32,
     pub noise_db: f32,
     pub peak_db: f32,
+    #[serde(default)]
+    pub similarity_percent: f64,
+    #[serde(skip)]
+    pub candidates: Vec<Take>,
 }
 pub struct Review {
     duplicates: bool,
@@ -76,6 +84,7 @@ fn start(s: &mut Session, p: &Value) -> Result<Value> {
     if s.audio_cleanup.as_ref().is_some_and(|r| s.jobs.iter().any(|j| j.id == r.job && !j.progress.finished.load(Ordering::Acquire))) {
         return Err(err("Analysis is already running"));
     }
+    let similarity = number(p, "similarityPercent", matching::DEFAULT_SIMILARITY, 50., 100.)?;
     let threshold = number(p, "thresholdDb", -42., -80., -10.)? as f32;
     let minimum = number(p, "minimumMs", 400., 100., 10000.)? as usize;
     let padding = number(p, "paddingMs", 120., 40., 1000.)? as usize;
@@ -191,7 +200,8 @@ fn start(s: &mut Session, p: &Value) -> Result<Value> {
             let mut analysis = analyze(&peak, tr.as_ref(), begin, q.settings.frame_rate.frame_duration(), &spans, threshold, auto, minimum, padding);
             if duplicates {
                 analysis.ranges.clear();
-                analysis.groups = find_groups(
+                analysis.similarity_percent = similarity;
+                analysis.candidates = find_takes(
                     tr.as_ref().ok_or_else(|| err("No transcript"))?,
                     &peak,
                     begin,
@@ -199,6 +209,7 @@ fn start(s: &mut Session, p: &Value) -> Result<Value> {
                     &spans,
                     analysis.threshold_db,
                 );
+                analysis.groups = matching::group(&analysis.candidates, similarity)?;
             }
             Ok(analysis)
         };
@@ -290,30 +301,14 @@ fn analyze(
             }
         }
     }
-    Analysis { ranges: merged(ranges), groups: vec![], threshold_db: threshold, noise_db: noise, peak_db: high }
+    Analysis { ranges: merged(ranges), groups: vec![], threshold_db: threshold, noise_db: noise, peak_db: high, ..Default::default() }
 }
-fn normalized(s: &str) -> Vec<String> {
-    s.split_whitespace().map(filmcraft_project::transcript::normalize_word).filter(|s| !s.is_empty()).collect()
-}
-fn similar(a: &str, b: &str) -> bool {
-    let a = normalized(a);
-    let b = normalized(b);
-    if a.len() < 3 || b.len() < 3 || a.len().abs_diff(b.len()) > 2 {
-        return false;
-    }
-    if a == b {
-        return true;
-    }
-    // Preserve word order; at most one substituted word for longer takes.
-    a.len() >= 6 && a.len() == b.len() && a.iter().zip(&b).filter(|(a, b)| a != b).count() <= 1
-}
-fn find_groups(tr: &Transcript, audio: &[f32], begin: Tick, frame: Tick, spans: &[TimeRange], threshold: f32) -> Vec<Group> {
+fn find_takes(tr: &Transcript, audio: &[f32], begin: Tick, frame: Tick, spans: &[TimeRange], threshold: f32) -> Vec<Take> {
     let mut phrases = vec![];
     let mut first = 0;
     for i in 0..tr.words.len().min(50000) {
         let w = &tr.words[i];
-        let end =
-            i + 1 == tr.words.len() || w.text.ends_with(['.', '!', '?']) || tr.words.get(i + 1).is_some_and(|n| (n.start - w.end).to_units_floor(1000) > 450);
+        let end = i + 1 == tr.words.len() || tr.words.get(i + 1).is_some_and(|n| (n.start - w.end).to_units_floor(1000) > 450);
         if !end {
             continue;
         }
@@ -358,18 +353,26 @@ fn find_groups(tr: &Transcript, audio: &[f32], begin: Tick, frame: Tick, spans: 
             break;
         }
     }
-    let mut groups: Vec<Group> = vec![];
-    for take in phrases {
-        if let Some(g) = groups.iter_mut().find(|g| similar(&g.takes[0].text, &take.text) && g.takes.iter().all(|t| take.start >= t.end || take.end <= t.start))
-        {
-            g.takes.push(take);
-        } else {
-            groups.push(Group { takes: vec![take], resolved: false });
-        }
-    }
-    groups.retain(|g| g.takes.len() > 1);
-    groups
+    phrases
 }
+/// Reuse safe waveform-bounded candidates; never send audio to the transcriber again.
+fn regroup(s: &mut Session, p: &Value) -> Result<Value> {
+    let minimum = number(p, "similarityPercent", matching::DEFAULT_SIMILARITY, 50., 100.)?;
+    poll(s);
+    let r = s.audio_cleanup.as_mut().ok_or_else(|| err("Analyze selected clips first"))?;
+    if !r.duplicates || !Arc::ptr_eq(&r.snapshot, &s.project) || s.state.active_sequence != Some(r.sequence) || s.state.selection != r.selection {
+        return Err(err("Project changed; analyze duplicate takes again"));
+    }
+    if !r.removed.is_empty() {
+        return Err(err("Takes have already been removed; analyze again before changing similarity"));
+    }
+    let a = r.analysis.as_mut().ok_or_else(|| err("Analysis is not complete"))?;
+    let groups = matching::group(&a.candidates, minimum)?;
+    a.groups = groups;
+    a.similarity_percent = minimum;
+    Ok(json!({"groups":a.groups.len(), "similarityPercent":minimum}))
+}
+
 pub fn poll(s: &mut Session) {
     if let Some(r) = s.audio_cleanup.as_mut()
         && r.analysis.is_none()
@@ -383,7 +386,7 @@ pub fn inspect(s: &mut Session, _: &Value) -> Result<Value> {
     let job = s.jobs.iter().find(|j| j.id == r.job);
     let error = job.and_then(|j| lock(&j.result).as_ref().and_then(|v| v.as_ref().err().cloned()));
     Ok(
-        json!({"duplicates":r.duplicates,"job":r.job,"analysis":r.analysis,"error":error,"finished":job.is_none_or(|j|j.progress.finished.load(Ordering::Acquire)),"progress":job.map(|j|j.progress.done.load(Ordering::Relaxed)),"valid":Arc::ptr_eq(&r.snapshot,&s.project)&&s.state.active_sequence==Some(r.sequence)&&s.state.selection==r.selection}),
+        json!({"canRegroup":r.duplicates && r.removed.is_empty() && r.analysis.is_some(),"duplicates":r.duplicates,"job":r.job,"analysis":r.analysis,"error":error,"finished":job.is_none_or(|j|j.progress.finished.load(Ordering::Acquire)),"progress":job.map(|j|j.progress.done.load(Ordering::Relaxed)),"valid":Arc::ptr_eq(&r.snapshot,&s.project)&&s.state.active_sequence==Some(r.sequence)&&s.state.selection==r.selection}),
     )
 }
 fn mapped(t: Tick, removed: &[TimeRange]) -> Tick {
@@ -521,8 +524,8 @@ pub fn commands() -> Vec<CommandSpec> {
     [
     ("audioCleanup.analyze","Analyze selected audio",start as fn(&mut Session,&Value)->Result<Value>),
     ("audioCleanup.inspect","Inspect audio cleanup",inspect), ("audioCleanup.apply","Apply audio cleanup",apply),
-    ("audioCleanup.preview","Preview take",preview),("audioCleanup.cancel","Cancel audio cleanup",cancel),
-].into_iter().map(|(id,label,run)|CommandSpec{id,label,menu:&[],shortcut:None,params:r#"{"thresholdDb":number?,"minimumMs":number?,"paddingMs":number?,"autoThreshold":bool?,"protectSpeech":bool?,"duplicates":bool?,"group":integer?,"keep":integer?,"take":integer?}"#,enabled:has_seq,run,journal:false}).collect()
+    ("audioCleanup.regroup","Regroup duplicate takes",regroup),("audioCleanup.preview","Preview take",preview),("audioCleanup.cancel","Cancel audio cleanup",cancel),
+].into_iter().map(|(id,label,run)|CommandSpec{id,label,menu:&[],shortcut:None,params:r#"{"similarityPercent":number?,"thresholdDb":number?,"minimumMs":number?,"paddingMs":number?,"autoThreshold":bool?,"protectSpeech":bool?,"duplicates":bool?,"group":integer?,"keep":integer?,"take":integer?}"#,enabled:has_seq,run,journal:false}).collect()
 }
 
 #[cfg(test)]
@@ -558,13 +561,30 @@ mod tests {
             }
         }
         let spans = [TimeRange::from_bounds(ms(0), ms(6000))];
-        let g = find_groups(&tr, &audio, Tick::ZERO, ms(40), &spans, -42.);
+        let takes = find_takes(&tr, &audio, Tick::ZERO, ms(40), &spans, -42.);
+        let g = matching::group(&takes, 80.).unwrap();
         assert_eq!(g.len(), 1);
         assert_eq!(g[0].takes.len(), 2);
         assert!(g[0].takes[0].start <= ms(400));
         assert!(g[0].takes[0].end >= ms(1750));
-        assert!(!similar("один два три", "три два один"));
-        assert!(find_groups(&tr, &vec![0.2; audio.len()], Tick::ZERO, ms(40), &spans, -42.).is_empty());
+        assert!(find_takes(&tr, &vec![0.2; audio.len()], Tick::ZERO, ms(40), &spans, -42.).is_empty());
+    }
+    #[test]
+    fn sentence_punctuation_does_not_split_a_continuous_take() {
+        let mut tr = Transcript::default();
+        let mut audio = vec![0f32; 16000 * 6];
+        for (offset, words) in [(500, ["Это.", "Наш,", "новый", "дубль!"]), (3000, ["это", "наш", "новый", "дубль"])] {
+            for (i, text) in words.iter().enumerate() {
+                let a = offset + i as i64 * 300;
+                tr.words.push(Word::new(*text, ms(a), ms(a + 250)));
+                audio[(a * 16) as usize..((a + 250) * 16) as usize].fill(0.2);
+            }
+        }
+        let takes = find_takes(&tr, &audio, Tick::ZERO, ms(40), &[TimeRange::from_bounds(ms(0), ms(6000))], -42.);
+        let groups = matching::group(&takes, 100.).unwrap();
+        assert_eq!(groups.len(), 1);
+        assert_eq!(groups[0].takes.len(), 2);
+        assert_eq!(groups[0].similarity_percent, 100.);
     }
     fn review(s: &mut Session, analysis: Analysis) {
         let q = s.active_sequence().unwrap();
@@ -608,8 +628,8 @@ mod tests {
             &mut s,
             Analysis {
                 groups: vec![
-                    Group { takes: vec![take(100, 500), take(1000, 1400)], resolved: false },
-                    Group { takes: vec![take(2000, 2400), take(3000, 3400)], resolved: false },
+                    Group { takes: vec![take(100, 500), take(1000, 1400)], resolved: false, similarity_percent: 100. },
+                    Group { takes: vec![take(2000, 2400), take(3000, 3400)], resolved: false, similarity_percent: 100. },
                 ],
                 ..Default::default()
             },
@@ -622,6 +642,38 @@ mod tests {
         s.execute("audioCleanup.apply", json!({"group":1,"keep":1})).unwrap();
         s.execute("edit.undo", json!({})).unwrap();
         assert_eq!(s.project, first);
+    }
+    #[test]
+    fn threshold_regroups_cached_takes_without_transcription_or_project_edits() {
+        let mut s = Session::default();
+        s.execute("file.openDemoProject", json!({})).unwrap();
+        s.transcriber = None;
+        let takes = vec![
+            Take { text: "сегодня мы покажем новый редактор".into(), start: ms(100), end: ms(500) },
+            Take { text: "сегодня мы покажем крутой редактор".into(), start: ms(1000), end: ms(1400) },
+        ];
+        review(&mut s, Analysis { candidates: takes, similarity_percent: 100., ..Default::default() });
+        s.audio_cleanup.as_mut().unwrap().duplicates = true;
+        let before = s.project.clone();
+        let jobs = s.jobs.len();
+        for value in [json!(-1), json!(101), json!("80"), Value::Null, json!([])] {
+            assert!(s.execute("audioCleanup.regroup", json!({"similarityPercent":value})).is_err());
+        }
+        assert_eq!(s.execute("audioCleanup.regroup", json!({"similarityPercent":80})).unwrap()["groups"], 1);
+        assert_eq!(s.execute("audioCleanup.regroup", json!({"similarityPercent":81})).unwrap()["groups"], 0);
+        assert_eq!(s.execute("audioCleanup.regroup", json!({"similarityPercent":80})).unwrap()["groups"], 1);
+        assert_eq!(s.jobs.len(), jobs);
+        assert!(Arc::ptr_eq(&s.project, &before));
+        let p = s.execute("audioCleanup.preview", json!({"group":0,"take":1})).unwrap();
+        assert_eq!(p["start"], json!(ms(1000)));
+        s.execute("audioCleanup.apply", json!({"group":0,"keep":1})).unwrap();
+        let after = s.project.clone();
+        assert!(!Arc::ptr_eq(&after, &before));
+        assert!(s.execute("audioCleanup.regroup", json!({"similarityPercent":90})).is_err());
+        assert_eq!(s.project, after);
+        s.execute("edit.undo", json!({})).unwrap();
+        assert_eq!(s.project, before);
+        assert!(s.execute("audioCleanup.regroup", json!({"similarityPercent":80})).is_err());
     }
     #[test]
     fn local_analysis_needs_no_transcriber_and_includes_linked_audio() {
@@ -652,7 +704,15 @@ mod tests {
         let mut s = Session::default();
         s.execute("file.openDemoProject", json!({})).unwrap();
         let before = s.project.clone();
-        for p in [json!({"thresholdDb":100}), json!({"minimumMs":-1}), json!({"paddingMs":"bad"})] {
+        for p in [
+            json!({"thresholdDb":100}),
+            json!({"minimumMs":-1}),
+            json!({"paddingMs":"bad"}),
+            json!({"similarityPercent":49}),
+            json!({"similarityPercent":101}),
+            json!({"similarityPercent":"80"}),
+            json!({"similarityPercent":null}),
+        ] {
             assert!(s.execute("audioCleanup.analyze", p).is_err());
         }
         review(&mut s, Analysis::default());

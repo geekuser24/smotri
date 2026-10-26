@@ -383,9 +383,20 @@ proposed cut count; OK applies all cuts as one undoable edit. Silence below a ch
 cannot reliably be distinguished from extremely quiet speech without reviewing/listening or
 using speech protection.
 
-Duplicate review uses Scribe v2, segments phrases at sentence endings or pauses, and groups
-matching word sequences (three words minimum; longer phrases allow one changed word). This is
-conservative repeated-take detection, not semantic paraphrase detection. Phrase bounds expand
+Duplicate review uses Scribe v2 and segments takes at pauses longer than 450 ms, rather than
+transcription punctuation. **Take similarity** is adjustable from 50 to 100% (default 80%).
+Case, punctuation and Russian е/ё differences are ignored. The percentage is
+`100 × (1 − word edit distance / longer word count)`; insertions, omissions and replacements
+count as edits, and word order matters. Every pair in a group must meet the threshold, and the
+panel displays the group's minimum match. At 100%, normalized words must match exactly.
+This is textual similarity, not semantic paraphrase detection: even similar phrases can have
+different meanings. Three normalized words are required; takes over 100 words are not grouped.
+
+After analysis, **Recalculate matches** applies a changed percentage to the cached, safely bounded
+takes without another ElevenLabs request or any project edit. Choosing a take is disabled until
+results match the slider. Once a take has been deleted, changing the threshold requires a new
+analysis, so already accepted choices cannot accidentally be regrouped. Matching has a bounded
+work budget; an oversized comparison returns an actionable error and preserves existing results. Phrase bounds expand
 100–350 ms toward quiet audio windows, snap to frames, and may not swallow neighboring transcript
 words. Unsafe bounds are omitted. Each group lists its takes: Preview plays the corresponding
 current timeline interval while the editor remains available; Keep ripple-deletes the other
@@ -398,9 +409,9 @@ are rejected. 5 ms gain envelopes soften audio joins without replacing existing 
 Analysis is tied to an exact project/sequence snapshot; outside edits or Undo invalidate the review.
 Reset Analysis cancels pending analysis but preserves already accepted edits (Undo remains available).
 
-Commands: `audioCleanup.analyze`, `.inspect`, `.apply`, `.preview`, `.cancel`;
+Commands: `audioCleanup.analyze` (`similarityPercent`: 50–100), `.regroup` (`similarityPercent`), `.inspect`, `.apply`, `.preview`, `.cancel`;
 UI commands: `audioCleanup.openSilence`, `audioCleanup.openDuplicates`. Both open ordinary dockable panels (Window → Silence Removal / Duplicate Takes), not modal dialogs. Analysis uses the selection when Analyze is pressed. Timeline editing remains available; project edits invalidate old results.
-The six engine regression tests cover waveform margins/quiet speech, duplicate grouping, local
+Engine regression tests cover waveform margins/quiet speech, duplicate grouping, local
 analysis without a transcriber, linked A/V, untouched unrelated tracks, remapped review times,
 Undo and invalid inputs. Live API and UI validation is recorded separately in local QA logs.
 

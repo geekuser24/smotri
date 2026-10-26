@@ -12,6 +12,8 @@ pub struct Dialog {
     duplicates: bool,
     threshold: f32,
     minimum: f32,
+    similarity: f64,
+    analysis_settings: Option<(u64, f64)>,
     padding: f32,
     auto: bool,
     protect: bool,
@@ -24,7 +26,19 @@ fn label(ru: &'static str, en: &'static str) -> &'static str {
 }
 impl Dialog {
     fn new(duplicates: bool) -> Self {
-        Self { duplicates, threshold: -42., minimum: 400., padding: 120., auto: true, protect: false, page: 0, error: String::new(), message: String::new() }
+        Self {
+            duplicates,
+            threshold: -42.,
+            minimum: 400.,
+            similarity: 80.,
+            analysis_settings: None,
+            padding: 120.,
+            auto: true,
+            protect: false,
+            page: 0,
+            error: String::new(),
+            message: String::new(),
+        }
     }
 }
 pub fn open(app: &mut FilmcraftApp, duplicates: bool) -> Result<Value, String> {
@@ -65,6 +79,15 @@ pub fn show(app: &mut FilmcraftApp, ui: &mut egui::Ui, rect: egui::Rect, duplica
     if running {
         ctx.request_repaint_after(std::time::Duration::from_millis(100));
     }
+    if duplicates && let Some(a) = analysis {
+        let settings = (status["job"].as_u64().unwrap_or(0), a["similarity_percent"].as_f64().unwrap_or(80.));
+        if d.analysis_settings != Some(settings) {
+            d.similarity = settings.1;
+            d.analysis_settings = Some(settings);
+        }
+    }
+    let mut regroup = false;
+    let mut pending_similarity = false;
     let mut cancel = false;
     let mut analyze = false;
     let mut apply = None;
@@ -83,6 +106,30 @@ pub fn show(app: &mut FilmcraftApp, ui: &mut egui::Ui, rect: egui::Rect, duplica
                     "Прослушай варианты и оставь нужный дубль. Остальные удалятся со сдвигом. Cmd+Z — отменить.",
                     "Preview takes and keep one. The others are ripple-deleted. Undo is available.",
                 ));
+                let r = ui.add_enabled(
+                    !busy && (analysis.is_none() || status["canRegroup"].as_bool().unwrap_or(false)),
+                    egui::Slider::new(&mut d.similarity, 50.0..=100.0).integer().suffix(" %")
+                        .text(label("Совпадение дублей", "Take similarity")),
+                );
+                app.auto.add_response("cleanup.duplicates.similarity", &r, "Take similarity");
+                ui.small(label(
+                    "Регистр и пунктуация не учитываются. Ниже процент — больше вариантов с отличающимися словами. Смысл может различаться: прослушай перед удалением.",
+                    "Case and punctuation are ignored. Lower percentages allow more word differences. Meaning may differ: preview before deleting.",
+                ));
+                pending_similarity = analysis.and_then(|a| a["similarity_percent"].as_f64()).is_some_and(|v| (v - d.similarity).abs() > 0.001);
+                if analysis.is_some() {
+                    regroup = button(app, ui, true, "cleanup.regroup", label("Пересчитать совпадения", "Recalculate matches"),
+                        valid && !busy && pending_similarity && status["canRegroup"].as_bool().unwrap_or(false));
+                    if pending_similarity {
+                        ui.small(label("Пересчитай совпадения перед выбором дубля. Повторная расшифровка не нужна.",
+                            "Recalculate before choosing a take. No new transcription is needed."));
+                    }
+                    if !status["canRegroup"].as_bool().unwrap_or(false) {
+                        ui.small(label("Чтобы изменить порог после удаления дублей, запусти новый анализ.",
+                            "Analyze again to change the threshold after deleting takes."));
+                    }
+                }
+
             } else {
                 let mut changed = false;
                 ui.add_enabled_ui(!running, |ui| {
@@ -177,6 +224,8 @@ pub fn show(app: &mut FilmcraftApp, ui: &mut egui::Ui, rect: egui::Rect, duplica
                                 d.page += 1;
                             }
                         });
+                        ui.label(format!("{}: {:.1}%", label("Минимальное совпадение в группе", "Minimum match in group"),
+                            group["similarity_percent"].as_f64().unwrap_or(100.)));
                         let resolved = group["resolved"].as_bool().unwrap_or(false);
                         if resolved {
                             ui.label(label("Готово — выбранный дубль сохранён.", "Done — selected take kept."));
@@ -194,7 +243,7 @@ pub fn show(app: &mut FilmcraftApp, ui: &mut egui::Ui, rect: egui::Rect, duplica
                                                 d.duplicates,
                                                 &format!("cleanup.preview.{i}"),
                                                 label("▶ Прослушать / посмотреть", "▶ Preview"),
-                                                valid && !resolved,
+                                                valid && !resolved && !pending_similarity,
                                             ) {
                                                 preview = Some(json!({"group":d.page,"take":i}));
                                             }
@@ -204,7 +253,7 @@ pub fn show(app: &mut FilmcraftApp, ui: &mut egui::Ui, rect: egui::Rect, duplica
                                                 d.duplicates,
                                                 &format!("cleanup.keep.{i}"),
                                                 label("Оставить этот дубль", "Keep this take"),
-                                                valid && !resolved,
+                                                valid && !resolved && !pending_similarity,
                                             ) {
                                                 apply = Some(json!({"group":d.page,"keep":i}));
                                             }
@@ -230,11 +279,23 @@ pub fn show(app: &mut FilmcraftApp, ui: &mut egui::Ui, rect: egui::Rect, duplica
         app.stop();
         app.audio_cleanup.preview_end = None;
         d.message.clear();
-        let p = json!({"duplicates":d.duplicates,"thresholdDb":d.threshold,"minimumMs":d.minimum,"paddingMs":d.padding,"autoThreshold":d.auto,"protectSpeech":d.protect});
+        let p = json!({"duplicates":d.duplicates,"similarityPercent":d.similarity,"thresholdDb":d.threshold,"minimumMs":d.minimum,"paddingMs":d.padding,"autoThreshold":d.auto,"protectSpeech":d.protect});
         match app.session.execute("audioCleanup.analyze", p) {
             Ok(_) => {
                 d.error.clear();
                 d.page = 0;
+            }
+            Err(e) => d.error = e.to_string(),
+        }
+    }
+    if regroup {
+        app.stop();
+        app.audio_cleanup.preview_end = None;
+        match app.session.execute("audioCleanup.regroup", json!({"similarityPercent":d.similarity})) {
+            Ok(_) => {
+                d.page = 0;
+                d.error.clear();
+                d.message = label("Совпадения пересчитаны без повторной расшифровки.", "Matches recalculated without retranscription.").into();
             }
             Err(e) => d.error = e.to_string(),
         }
