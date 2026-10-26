@@ -474,6 +474,9 @@ impl<'a> Plan<'a> {
             for (side, v) in [(0u8, &s.pre), (1u8, &s.post)] {
                 for i in v.iter() {
                     (side, i.slot, &i.effect.effect, i.map.dsp).hash(&mut h);
+                    if i.map.dsp == "installed_audio" {
+                        format!("{:?}", i.effect.param(filmcraft_project::audio_plugin::STATE_PARAM)).hash(&mut h);
+                    }
                 }
             }
         }
@@ -538,6 +541,7 @@ struct StripState {
 }
 
 struct GraphState {
+    native: bool,
     next_out: i64,
     strips: Vec<StripState>,
     latency: usize,
@@ -545,7 +549,7 @@ struct GraphState {
 
 fn build_state(plan: &Plan, sr: u32) -> GraphState {
     let mk = |v: &[Insert], w: usize| -> Vec<Box<dyn AudioEffect>> {
-        v.iter().filter_map(|i| filmcraft_audio_dsp::create_effect(i.map.dsp, sr as f32, w)).collect()
+        v.iter().filter_map(|i| crate::audio_fx::create_processor(&i.effect, &i.map, sr, w)).collect()
     };
     let mut strips: Vec<StripState> = plan
         .strips
@@ -570,7 +574,7 @@ fn build_state(plan: &Plan, sr: u32) -> GraphState {
     }
     let m = strips.len() - 1;
     let latency = strips[m].in_lat + strips[m].lat_pre + strips[m].lat_post;
-    GraphState { next_out: 0, strips, latency }
+    GraphState { native: plan.strips.iter().any(|s| s.pre.iter().chain(&s.post).any(|i| i.map.dsp == "installed_audio")), next_out: 0, strips, latency }
 }
 
 fn cache() -> &'static Mutex<HashMap<u64, Vec<GraphState>>> {
@@ -860,7 +864,15 @@ pub(crate) fn mix_graph_at(
     let key = plan.structure_hash(sr);
     let taken = {
         let mut c = lock(cache());
-        c.get_mut(&key).and_then(|v| v.iter().position(|g| g.next_out == start).map(|i| v.swap_remove(i)))
+        let taken = c.get_mut(&key).and_then(|v| v.iter().position(|g| g.next_out == start).map(|i| v.swap_remove(i)));
+        if taken.is_none() {
+            // A new graph/seek must not retain idle native workers from earlier graphs.
+            c.retain(|_, v| {
+                v.retain(|g| !g.native);
+                !v.is_empty()
+            });
+        }
+        taken
     };
     let (mut st, skip) = match taken {
         Some(st) => (st, 0usize),
@@ -941,7 +953,7 @@ pub(crate) fn mix_graph_at(
         let mut c = lock(cache());
         let v = c.entry(key).or_default();
         v.push(st);
-        if v.len() > 4 {
+        if v.len() > if plan.strips.iter().any(|s| s.pre.iter().chain(&s.post).any(|e| e.map.dsp == "installed_audio")) { 1 } else { 4 } {
             v.remove(0);
         }
         if c.len() > 64 {
@@ -952,4 +964,8 @@ pub(crate) fn mix_graph_at(
         l.post_meters(&meters);
     }
     AudioBuffer { sample_rate: sr, channels: out.into_iter().map(|c| c[skip..].to_vec()).collect() }
+}
+
+pub fn clear_cache() {
+    lock(cache()).clear();
 }

@@ -132,7 +132,7 @@ agent-hours to close the area to Premiere, sequential.
 | Performance (beyond hardware) | ~55% | 60–120 | [performance.md](performance.md) |
 | Stability | ~45% | 60–120 | [gaps.md](gaps.md#g4-crashes-at-start-up-and-no-test-ci-on-pull-requests) |
 | Platforms | ~60% | 50–90 | [gaps.md](gaps.md#g9-windows-and-linux-at-run-time) |
-| Plugins and ecosystem | ~5% | 200–400 | [gaps.md](gaps.md#g11-no-plugin-hosting) |
+| Plugins and ecosystem | ~5% | 200–400 | [gaps.md](gaps.md#g11-partial-audio-plugin-hosting) |
 | AI features | ~25% | 150–300 | [gaps.md](gaps.md#g12-ai-features) |
 | **Total** | **~56%** | **~1,550–2,750** | |
 
@@ -158,7 +158,7 @@ Evidence for the cross-cutting rows:
   tar) and FreeBSD; Linux is something Premiere doesn't run on at all. Runtime testing is still
   mostly macOS; Windows and Linux reports dominate the issue list. The web build runs but its shell
   is incomplete. No mobile.
-- **Plugins ~5%.** No VST3 / Audio Units, no OpenFX, no Premiere / After Effects plug-in API, no
+- **Plugins ~5%.** Smotri now hosts mono/stereo VST2/VST3 and AU effects (see `docs/audio-plugins.md`); no native plugin editors, no OpenFX, no Premiere / After Effects plug-in API, no
   UXP panels (#325). Needs an owner decision (FFI). MCP, CLI and the control channel are ahead of
   Premiere's scripting.
 - **AI ~25%.** Speech to text exists (local Whisper) but is off in release builds; text-to-speech

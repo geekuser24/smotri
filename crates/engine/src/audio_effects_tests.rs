@@ -127,3 +127,49 @@ fn audio_effect_on_video_clip_applies_to_linked_audio() {
     assert_eq!(a.effects.last().unwrap().effect, "parametric_eq");
     assert!(v.effects.iter().all(|e| e.effect != "parametric_eq"), "EQ stays off the picture clip");
 }
+
+#[test]
+fn installed_audio_effects_round_trip_and_fail_closed_when_missing() {
+    use filmcraft_project::audio_plugin::*;
+    let state = AudioPluginState {
+        plugin: AudioPlugin {
+            format: PluginFormat::Vst3,
+            path: "/missing/private-test-plugin.vst3".into(),
+            native_id: "test-missing-audio-plugin".into(),
+            name: "Synthetic Missing Effect".into(),
+            vendor: "Smotri tests".into(),
+            category: "Dynamics".into(),
+            parameters: vec![PluginParameter { id: "gain".into(), name: "Gain".into(), unit: "".into(), min: 0.0, max: 1.0, default: 0.5, steps: 0 }],
+        },
+        values: Default::default(),
+        state: vec![1, 2, 3],
+    };
+    let def = register(&state).unwrap();
+    let mut s = demo();
+    let clip = a1_clip(&s);
+    s.execute("effects.apply", json!({"clips":[clip],"effect":def.id})).unwrap();
+    s.execute("mixer.addInsert", json!({"strip":"A1","effect":def.id})).unwrap();
+    s.execute("mixer.setInsert", json!({"strip":"A1","slot":0,"params":{"gain":0.3}})).unwrap();
+    let round: filmcraft_project::Project = serde_json::from_slice(&serde_json::to_vec(&*s.project).unwrap()).unwrap();
+    let effect = &round.sequence(s.state.active_sequence.unwrap()).unwrap().audio_tracks[0].effects[0];
+    let restored = instance_state(effect).unwrap();
+    assert_eq!(restored.state, vec![1, 2, 3]);
+    assert!((restored.values["gain"] - 0.3).abs() < 1e-6);
+    let list = s.execute("effects.list", json!({})).unwrap();
+    assert!(list.as_array().unwrap().iter().any(|d| d["id"] == def.id));
+    let _ = render(&s, 256);
+    let ids = filmcraft_audio_plugin_client::enabled_sequence_ids(&s.project, s.state.active_sequence.unwrap());
+    assert!(filmcraft_audio_plugin_client::check_ids(&ids).is_err(), "missing plugin must block delivery, not silently render dry");
+    let mut fx = def.instance();
+    let mut dsp = filmcraft_audio_plugin_client::create(&fx, 48000, 2);
+    let mut l = [0.25; 64];
+    let mut r = l;
+    dsp.process(&mut [&mut l, &mut r]);
+    assert!(l.iter().chain(&r).all(|s| *s == 0.0));
+    fx.enabled = false;
+    s.execute("mixer.removeInsert", json!({"strip":"A1","slot":0})).unwrap();
+    let index = s.active_sequence().unwrap().find_item(ClipId(clip)).unwrap().1.effects.len() - 1;
+    s.execute("effects.remove", json!({"clip":clip,"index":index})).unwrap();
+    assert!(filmcraft_audio_plugin_client::enabled_sequence_ids(&s.project, s.state.active_sequence.unwrap()).is_empty());
+    assert!(filmcraft_audio_plugin_client::check_ids(&[]).is_ok());
+}

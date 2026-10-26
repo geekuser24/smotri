@@ -34,7 +34,8 @@ pub enum FxTarget {
 
 /// Effects that have a graphical editor.
 pub fn has_editor(effect: &str) -> bool {
-    matches!(effect, "parametric_eq" | "graphic_eq" | "graphic_eq_20" | "graphic_eq_30" | "multiband_compressor" | "dynamics_rack")
+    effect.starts_with("installed_audio_")
+        || matches!(effect, "parametric_eq" | "graphic_eq" | "graphic_eq_20" | "graphic_eq_30" | "multiband_compressor" | "dynamics_rack")
 }
 
 /// Open (or raise) the editor for a target.
@@ -202,6 +203,16 @@ pub fn show(app: &mut FilmcraftApp, ctx: &egui::Context) {
                 "parametric_eq" => parametric(ui, &mut ed),
                 "graphic_eq" | "graphic_eq_20" | "graphic_eq_30" => graphic(ui, &mut ed),
                 "multiband_compressor" => multiband(ui, &mut ed),
+                id if id.starts_with("installed_audio_") => {
+                    ui.set_min_width(430.0);
+                    if let Some(def) = ed.inst.def() {
+                        egui::ScrollArea::vertical().max_height(480.0).show(ui, |ui| {
+                            for p in def.params.iter().filter(|p| p.id != filmcraft_project::audio_plugin::STATE_PARAM) {
+                                ed.slider(ui, p.id, p.label, false);
+                            }
+                        });
+                    }
+                }
                 _ => dynamics(ui, &mut ed),
             }
             ui.separator();

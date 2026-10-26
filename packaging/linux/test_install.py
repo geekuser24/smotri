@@ -28,7 +28,7 @@ class InstallTests(unittest.TestCase):
         shutil.copyfile(
             HERE / f"{APP_ID}.desktop", self.share / "applications" / f"{APP_ID}.desktop"
         )
-        for name in ("filmcraft", "filmcraft-cli"):
+        for name in ("filmcraft", "filmcraft-cli", "filmcraft-audio-plugin-host"):
             (self.bundle / "bin" / name).write_text(
                 '#!/bin/sh\nprintf \'%s\\n\' "$0" "$@" > "$(dirname "$0")/launched"\n'
             )
@@ -53,7 +53,7 @@ class InstallTests(unittest.TestCase):
             (self.bundle / "share/doc/filmcraft/LICENSE-MIT").write_text(version)
             result = self.install("--prefix", prefix)
             self.assertEqual(result.returncode, 0, result.stderr)
-            for name in ("filmcraft", "filmcraft-cli"):
+            for name in ("filmcraft", "filmcraft-cli", "filmcraft-audio-plugin-host"):
                 self.assertTrue(os.access(prefix / "bin" / name, os.X_OK))
                 self.assertEqual(
                     (prefix / "bin" / name).read_bytes(), (self.bundle / "bin" / name).read_bytes()
@@ -110,7 +110,7 @@ class InstallTests(unittest.TestCase):
         target = self.root / "target"
         binaries = target / "release"
         binaries.mkdir(parents=True)
-        for name in ("filmcraft", "filmcraft-cli"):
+        for name in ("filmcraft", "filmcraft-cli", "filmcraft-audio-plugin-host"):
             binary = binaries / name
             binary.write_text("#!/bin/sh\necho 'Smotri fixture'\n")
             binary.chmod(0o755)

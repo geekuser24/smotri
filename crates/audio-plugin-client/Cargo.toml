@@ -1,0 +1,14 @@
+[package]
+name = "filmcraft-audio-plugin-client"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+[lints]
+workspace = true
+[dependencies]
+filmcraft-project = { workspace = true }
+filmcraft-audio-dsp = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+getrandom = "0.3"

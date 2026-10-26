@@ -53,6 +53,9 @@
       <Component Id="FilmcraftCli">
         <File Id="FilmcraftCliExe" Source="$(var.BinDir)\filmcraft-cli.exe" KeyPath="yes" />
       </Component>
+      <Component Id="AudioPluginHost">
+        <File Id="AudioPluginHostExe" Source="$(var.BinDir)\filmcraft-audio-plugin-host.exe" KeyPath="yes" />
+      </Component>
     </ComponentGroup>
   </Fragment>
 </Wix>

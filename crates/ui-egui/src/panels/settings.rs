@@ -726,6 +726,50 @@ fn mb(bytes: u64) -> String {
 fn custom(app: &mut FilmcraftApp, ui: &mut Ui, d: &mut SettingsDraft, name: &str) {
     let t = app.tokens;
     match name {
+        "audioPlugins" => {
+            let ru = crate::i18n::t("Preferences") == "Настройки";
+            ui.label(if ru { "Аудиоплагины VST / VST3 / Audio Units" } else { "VST / VST3 / Audio Units audio plugins" });
+            ui.label(if ru {
+                "Стандартные папки проверяются автоматически при сканировании. Дополнительные папки — по одной в строке:"
+            } else {
+                "Standard folders are included in each scan. Additional folders, one per line:"
+            });
+            let mut folders = get(&d.values, "plugins.audioFolders").as_str().unwrap_or("").to_owned();
+            let edit = ui.add(egui::TextEdit::multiline(&mut folders).desired_rows(3).desired_width(ui.available_width()));
+            app.auto.add("settings.plugins.audioFolders", edit.rect, "Audio plugin folders");
+            if edit.changed() {
+                put(&mut d.values, "plugins.audioFolders", json!(folders));
+            }
+            let catalog = filmcraft_audio_plugin_client::catalog::status();
+            let button = ui.add_enabled(!catalog.running, egui::Button::new(if ru { "Сканировать плагины" } else { "Scan plugins" }));
+            app.auto.add("settings.plugins.scan", button.rect, "Scan audio plugins");
+            if button.clicked() {
+                let folders: Vec<_> = get(&d.values, "plugins.audioFolders").as_str().unwrap_or("").lines().map(str::trim).filter(|s| !s.is_empty()).collect();
+                if let Err(e) = app.session.execute("audioPlugins.scan", json!({"folders":folders})) {
+                    d.message = e.to_string();
+                }
+            }
+            let retry = ui.button(if ru { "Перезапустить обработчики" } else { "Restart processors" });
+            app.auto.add("settings.plugins.restart", retry.rect, "Restart audio plugins");
+            if retry.clicked() {
+                app.stop();
+                if let Err(e) = app.session.execute("audioPlugins.reset", json!({})) {
+                    d.message = e.to_string();
+                }
+            }
+            if catalog.running {
+                ui.spinner();
+                ui.label(&catalog.current);
+                ui.ctx().request_repaint_after(std::time::Duration::from_millis(200));
+            }
+            ui.label(format!("{}: {}", if ru { "Найдено" } else { "Found" }, catalog.plugins.len()));
+            for state in &catalog.plugins {
+                ui.label(format!("{} · {} · {:?}", state.plugin.vendor, state.plugin.name, state.plugin.format));
+            }
+            for error in catalog.failures.iter().chain(filmcraft_audio_plugin_client::failures().iter()).take(30) {
+                ui.colored_label(t.text_dim, error);
+            }
+        }
         "labelColors" => {
             let tt = t;
             group(ui, &tt, tl!("Label Colors"), |ui| {
@@ -823,6 +867,7 @@ fn rows(app: &mut FilmcraftApp, ui: &mut Ui, d: &mut SettingsDraft, list: &[Row]
         }
         match r {
             Row::Field(f) if APPEARANCE_KEYS.contains(&f.key) => continue,
+            Row::Field(f) if f.key == "plugins.audioFolders" => continue,
             Row::Field(f) => draw_field(app, ui, d, f),
             Row::Group(title, inner) => group(ui, &t, title, |ui| rows(app, ui, d, inner)),
             Row::Note(text) => note(ui, &t, text),

@@ -12,6 +12,7 @@
 
 pub mod aaf_omf;
 pub mod audio_cleanup;
+pub mod audio_plugins;
 pub mod autosave;
 pub mod captions;
 pub mod clip_ops;
@@ -644,6 +645,7 @@ impl Session {
         self.shortcuts.set_dir(&cfg.data_dir);
         self.presets.set_dir(&cfg.data_dir);
         self.export_presets.set_dir(&cfg.data_dir);
+        let _ = filmcraft_audio_plugin_client::catalog::load(&cfg.data_dir.join("audio-plugins.json"));
         self.prefs_path = Some(prefs_path);
         self.apply_media_cache();
         self.persistence = Some(autosave::Persistence::start(&cfg, self.prefs.auto_save.clone())?);

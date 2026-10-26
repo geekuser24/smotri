@@ -34,7 +34,7 @@ pub fn show(app: &mut FilmcraftApp, ui: &mut egui::Ui, rect: Rect) {
     let mut bui = ui.new_child(egui::UiBuilder::new().max_rect(body).id_salt("fx-body"));
     bui.set_clip_rect(body);
     let filter = q.to_lowercase();
-    let defs = filmcraft_project::effect_defs();
+    let defs = filmcraft_project::effect::all_effect_defs();
     // folder tree: top-level categories in Premiere's order
     let tops = filmcraft_project::vtransition::EFFECT_TOP_FOLDERS;
     let mut apply: Option<String> = None;
@@ -74,13 +74,25 @@ pub fn show(app: &mut FilmcraftApp, ui: &mut egui::Ui, rect: Rect) {
             subs.dedup();
             subs.sort_by_key(|s| s.is_empty());
             let mut seen = Vec::new();
+            let mut expanded = std::collections::HashMap::new();
             for s in subs {
                 if seen.contains(&s) {
                     continue;
                 }
                 seen.push(s);
-                let key = format!("{top}/{s}");
-                if !s.is_empty() && !folder_row(app, ui, &key, 1, &filter) {
+                let parts: Vec<_> = s.split(" / ").take(3).collect();
+                let mut path = top.to_string();
+                let mut open = true;
+                for (depth, part) in parts.iter().enumerate().filter(|(_, p)| !p.is_empty()) {
+                    path.push('/');
+                    path.push_str(part);
+                    let is_open = *expanded.entry(path.clone()).or_insert_with(|| folder_row(app, ui, &path, depth + 1, &filter));
+                    if !is_open {
+                        open = false;
+                        break;
+                    }
+                }
+                if !open {
                     continue;
                 }
                 for d in items.iter().filter(|d| sub(d) == s) {
@@ -89,7 +101,7 @@ pub fn show(app: &mut FilmcraftApp, ui: &mut egui::Ui, rect: Rect) {
                         ui.painter().rect_filled(r, 0.0, t.hover);
                     }
                     // inside the top folder, or inside its sub-folder
-                    let x = r.min.x + tree_x(if s.is_empty() { 1 } else { 2 }) + 30.0;
+                    let x = r.min.x + tree_x(if s.is_empty() { 1 } else { parts.len() + 1 }) + 30.0;
                     let icon_r = Rect::from_center_size(pos2(x - 12.0, r.center().y), vec2(13.0, 13.0));
                     let is_tr = matches!(d.kind, filmcraft_project::EffectKind::VideoTransition | filmcraft_project::EffectKind::AudioTransition);
                     ui.painter().rect_stroke(icon_r, 2.0, egui::Stroke::new(1.0, t.text_dim), egui::StrokeKind::Inside);

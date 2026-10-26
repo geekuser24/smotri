@@ -844,6 +844,7 @@ impl TimelinePrefs {
 #[serde(rename_all = "camelCase", default)]
 pub struct PluginPrefs {
     pub developer_mode: bool,
+    pub audio_folders: String,
 }
 
 /// Indeterminate Media Timebase choices → frame rates.
@@ -1426,7 +1427,8 @@ static CATEGORIES: &[Category] = &[
         title: "Plugins",
         rows: &[
             Row::Group("Plugins", &[b("plugins.developerMode", "Enable developer mode", false)]),
-            Row::Note("No plugins are installed. Changes will take effect the next time you start Smotri."),
+            f("plugins.audioFolders", "Additional audio plugin folders", Kind::Text, true),
+            Row::Custom("audioPlugins"),
         ],
     },
     Category {

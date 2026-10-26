@@ -179,6 +179,10 @@ impl Backend {
         // user export presets (and other per-user libraries) from the data directory
         if let Some(dir) = a.opt("--data-dir").map(std::path::PathBuf::from).or_else(filmcraft_engine::autosave::default_data_dir) {
             s.export_presets.set_dir(&dir);
+            s.prefs_path = Some(dir.join("preferences.json"));
+            if let Err(e) = filmcraft_audio_plugin_client::catalog::load(&dir.join("audio-plugins.json")) {
+                eprintln!("Audio plugin catalog: {e}. Rescan plugins in Settings.");
+            }
         }
         if let Some(p) = a.opt("--project") {
             if let Err(e) = s.execute("file.open", json!({"path": p})) {
@@ -203,7 +207,14 @@ impl Backend {
                         p.insert("wait".into(), json!(true));
                     }
                 }
-                s.execute(id, params).map_err(|e| e.to_string())
+                let result = s.execute(id, params).map_err(|e| e.to_string())?;
+                if id == "audioPlugins.scan" {
+                    while filmcraft_audio_plugin_client::catalog::status().running {
+                        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                    }
+                    return serde_json::to_value(filmcraft_audio_plugin_client::catalog::status()).map_err(|e| e.to_string());
+                }
+                Ok(result)
             }
             // a blocking export runs as an app job polled by the client (#91, #92)
             Backend::Bridge(b) => b.execute(id, params).await.map_err(|e| e.to_string()),

@@ -58,12 +58,12 @@ echo "==> Smotri $VERSION for macOS ($ARCH), identity: $IDENTITY, notarize: $NOT
 if [[ "$SKIP_BUILD" = 0 ]]; then
   args=()
   for t in "${TARGETS[@]}"; do args+=(--target "$t"); done
-  (cd "$ROOT" && cargo build --release --locked -p filmcraft -p filmcraft-cli "${args[@]}")
+  (cd "$ROOT" && cargo build --release --locked -p filmcraft -p filmcraft-cli -p filmcraft-audio-plugin-host "${args[@]}")
 fi
 
 rm -rf "$WORK"
 mkdir -p "$WORK/bin"
-for bin in filmcraft filmcraft-cli; do
+for bin in filmcraft filmcraft-cli filmcraft-audio-plugin-host; do
   inputs=()
   for t in "${TARGETS[@]}"; do inputs+=("$CARGO_TARGET_DIR/$t/release/$bin"); done
   lipo -create -output "$WORK/bin/$bin" "${inputs[@]}"
@@ -102,6 +102,7 @@ echo "==> assembling $APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 # Executable and icon carry the display name (CFBundleExecutable / CFBundleIconFile).
 cp "$WORK/bin/filmcraft" "$APP/Contents/MacOS/Smotri"
+cp "$WORK/bin/filmcraft-audio-plugin-host" "$APP/Contents/MacOS/"
 cp "$ROOT/assets/smotri/Smotri.icns" "$APP/Contents/Resources/Smotri.icns"
 sed -e "s/@VERSION@/$VERSION/g" -e "s/@SHORT_VERSION@/$SHORT_VERSION/g" \
   -e "s/@BUILD_SHA@/${FILMCRAFT_BUILD_SHA:-unknown}/g" \
@@ -118,7 +119,8 @@ for helper in yt-dlp ffmpeg ffprobe deno; do
 done
 
 # Sign inside-out: nested code first, then the bundle itself (no --deep on the final signature).
-# Today the only nested code is the main executable; frameworks/helpers would be signed here too.
+# Only the isolated worker can load third-party native plugin libraries.
+sign --options runtime --entitlements "$HERE/audio-plugin-entitlements.plist" "$APP/Contents/MacOS/filmcraft-audio-plugin-host"
 sign --options runtime --entitlements "$HERE/entitlements.plist" "$APP/Contents/MacOS/Smotri"
 sign --options runtime --entitlements "$HERE/entitlements.plist" "$APP"
 codesign --verify --strict --deep --verbose=2 "$APP"
@@ -160,6 +162,8 @@ echo "==> building $CLI_ZIP"
 CLI_DIR="$WORK/filmcraft-cli-$VERSION-macos-$ARCH"
 mkdir -p "$CLI_DIR"
 cp "$WORK/bin/filmcraft-cli" "$CLI_DIR/"
+cp "$WORK/bin/filmcraft-audio-plugin-host" "$CLI_DIR/"
+sign --options runtime --entitlements "$HERE/audio-plugin-entitlements.plist" "$CLI_DIR/filmcraft-audio-plugin-host"
 copy_docs "$CLI_DIR"
 sign --options runtime "$CLI_DIR/filmcraft-cli"
 codesign --verify --strict --verbose=2 "$CLI_DIR/filmcraft-cli"

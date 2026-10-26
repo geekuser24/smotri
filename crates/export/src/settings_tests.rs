@@ -1104,7 +1104,7 @@ fn loudness_normalization_corrects_limiter_loss_and_bounds_impossible_targets() 
             })
             .unwrap();
         let report = audio.loudness.unwrap();
-        let result = audio.rest(&sources).unwrap();
+        let result = audio.rest(&sources).unwrap().unwrap();
         let (integrated, peak) = lufs(&result, 48_000);
         eprintln!("target {target}: output {integrated:.3} LUFS, {peak:.3} dBTP, gain {:.3}, chunks {}", report.gain_db, chunks.get());
         assert!(chunks.get() <= 5, "one raw pass plus at most four limited trials");
@@ -1384,6 +1384,35 @@ fn size_limit_staging_preserves_previous_file_and_sink() {
     out.write_all(&vec![7; 1_000_001]).unwrap();
     assert!(matches!(out.finish(&mem), Err(ExportError::SizeLimit { .. })));
     assert!(!called.load(Ordering::Relaxed));
+}
+
+#[test]
+fn missing_native_plugin_export_preserves_existing_destination() {
+    use filmcraft_project::audio_plugin::*;
+    let state = AudioPluginState {
+        plugin: AudioPlugin {
+            format: PluginFormat::Vst3,
+            path: "/missing/export-test-plugin.vst3".into(),
+            native_id: "export-missing-plugin-regression".into(),
+            name: "Missing Export Effect".into(),
+            vendor: "Smotri tests".into(),
+            category: "Dynamics".into(),
+            parameters: vec![],
+        },
+        values: Default::default(),
+        state: vec![],
+    };
+    let def = register(&state).unwrap();
+    let (mut p, seq, m) = matte([0.2, 0.5, 0.8, 1.0], 32, 32, Some(-12.0));
+    Arc::make_mut(&mut p).sequence_mut(seq).unwrap().audio_tracks[0].effects.push(def.instance());
+    let dir = Scratch::new("missing-native-plugin");
+    let path = dir.path("existing.wav");
+    std::fs::write(&path, b"previous good export").unwrap();
+    let settings = ExportSettings { path: path.clone(), format: Format::Wav, ..Default::default() };
+    let error = export(&p, seq, &settings, &m, &Progress::default()).unwrap_err();
+    assert!(matches!(error, ExportError::Encode(_)), "{error}");
+    assert_eq!(std::fs::read(&path).unwrap(), b"previous good export");
+    assert_eq!(std::fs::read_dir(&dir.0).unwrap().count(), 1);
 }
 
 #[test]

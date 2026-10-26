@@ -197,8 +197,8 @@ fn slot_box(ui: &mut egui::Ui, r: Rect, text: &str, filled: bool, dim: bool, t: 
 
 /// The DSP-backed audio effects that can go in an insert slot.
 fn insert_effects() -> Vec<&'static filmcraft_project::EffectDef> {
-    filmcraft_project::effect_defs()
-        .iter()
+    filmcraft_project::effect::all_effect_defs()
+        .into_iter()
         .filter(|d| d.kind == filmcraft_project::EffectKind::Audio && !d.intrinsic && filmcraft_render::audio_fx::supported(d.id))
         .collect()
 }
@@ -443,31 +443,50 @@ fn strip(app: &mut FilmcraftApp, ui: &mut egui::Ui, cx: &mut Ctx, id: TrackId, s
                     None if can_add => {
                         // Premiere's effect-slot menu: one submenu per Audio Effects folder.
                         let fx = insert_effects();
-                        let mut folders: Vec<&str> = Vec::new();
-                        for d in &fx {
-                            let f = d.category.get(1).copied().unwrap_or("");
-                            if !folders.contains(&f) {
-                                folders.push(f);
+                        fn menu(
+                            ui: &mut egui::Ui,
+                            fx: &[&filmcraft_project::EffectDef],
+                            depth: usize,
+                            autos: &mut Vec<(String, egui::Rect)>,
+                            add: &mut impl FnMut(&mut egui::Ui, &filmcraft_project::EffectDef),
+                        ) {
+                            if depth >= 3 {
+                                for d in fx {
+                                    add(ui, d);
+                                }
+                                return;
+                            }
+                            let part = |d: &filmcraft_project::EffectDef| d.category.get(1).copied().unwrap_or("").split(" / ").nth(depth).unwrap_or("");
+                            let mut groups = Vec::new();
+                            for d in fx {
+                                let label = part(d);
+                                if !groups.contains(&label) {
+                                    groups.push(label);
+                                }
+                            }
+                            for group in groups {
+                                let items: Vec<_> = fx.iter().copied().filter(|d| part(d) == group).collect();
+                                if group.is_empty() {
+                                    for d in items {
+                                        add(ui, d);
+                                    }
+                                } else {
+                                    let mr = ui.menu_button(crate::i18n::t(group), |ui| menu(ui, &items, depth + 1, autos, add));
+                                    autos.push((group.to_string(), mr.response.rect));
+                                }
                             }
                         }
-                        for folder in folders {
-                            let items: Vec<_> = fx.iter().filter(|d| d.category.get(1).copied().unwrap_or("") == folder).collect();
-                            let mut add = |ui: &mut egui::Ui| {
-                                for d in &items {
-                                    let r = ui.button(d.name);
-                                    app.auto.add(&format!("{ap}.fx.{k}.{}", d.id), r.rect, d.name);
-                                    if r.clicked() {
-                                        cx.cmd("mixer.addInsert", json!({"strip": sid, "effect": d.id}));
-                                        ui.close();
-                                    }
-                                }
-                            };
-                            if folder.is_empty() {
-                                add(ui);
-                            } else {
-                                let mr = ui.menu_button(folder, |ui| add(ui));
-                                app.auto.add(&format!("{ap}.fx.{k}.folder.{folder}"), mr.response.rect, folder);
+                        let mut folder_autos = Vec::new();
+                        menu(ui, &fx, 0, &mut folder_autos, &mut |ui, d| {
+                            let r = ui.button(d.name);
+                            app.auto.add(&format!("{ap}.fx.{k}.{}", d.id), r.rect, d.name);
+                            if r.clicked() {
+                                cx.cmd("mixer.addInsert", json!({"strip": sid, "effect": d.id}));
+                                ui.close();
                             }
+                        });
+                        for (folder, rect) in folder_autos {
+                            app.auto.add(&format!("{ap}.fx.{k}.folder.{folder}"), rect, &folder);
                         }
                     }
                     None => {

@@ -123,7 +123,13 @@ pub struct EffectInstance {
 
 impl EffectInstance {
     pub fn def(&self) -> Option<&'static EffectDef> {
-        find_effect(&self.effect)
+        find_effect(&self.effect).or_else(|| {
+            if self.effect.starts_with("installed_audio_") {
+                crate::audio_plugin::instance_state(self).ok().and_then(|s| crate::audio_plugin::register(&s).ok())
+            } else {
+                None
+            }
+        })
     }
     pub fn param(&self, id: &str) -> Option<&Param> {
         self.params.get(id)
@@ -860,13 +866,13 @@ pub fn effect_defs() -> &'static [EffectDef] {
 }
 
 pub fn find_effect(id: &str) -> Option<&'static EffectDef> {
-    effect_defs().iter().find(|e| e.id == id)
+    effect_defs().iter().find(|e| e.id == id).or_else(|| crate::audio_plugin::definition(id))
 }
 
 /// Case-insensitive lookup by id or display name.
 pub fn find_effect_by_name(name: &str) -> Option<&'static EffectDef> {
     let n = name.to_ascii_lowercase();
-    effect_defs().iter().find(|e| e.id == n || e.name.to_ascii_lowercase() == n)
+    all_effect_defs().into_iter().find(|e| e.id == n || e.name.to_ascii_lowercase() == n)
 }
 
 /// Intrinsic video effects every video track item carries (Motion, Opacity, Time Remapping).
@@ -876,6 +882,11 @@ pub fn intrinsic_video() -> Vec<EffectInstance> {
 
 pub fn intrinsic_audio() -> Vec<EffectInstance> {
     ["volume", "channel_volume", "panner"].iter().filter_map(|id| find_effect(id)).map(EffectDef::instance).collect()
+}
+
+/// Built-in and installed audio effects.
+pub fn all_effect_defs() -> Vec<&'static EffectDef> {
+    effect_defs().iter().chain(crate::audio_plugin::definitions()).collect()
 }
 
 #[cfg(test)]

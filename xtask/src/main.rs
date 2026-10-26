@@ -68,6 +68,7 @@ const LAYERS: &[(&str, u8)] = &[
     ("text", 1),
     ("edit", 2),
     ("codecs", 2),
+    ("audio-plugin-client", 2),
     ("keyframe", 2),
     ("effects", 2),
     ("audio", 2),
@@ -88,6 +89,7 @@ const LAYERS: &[(&str, u8)] = &[
     ("ui-egui", 5),
     ("automation", 5),
     ("filmcraft", 6),
+    ("audio-plugin-host", 6),
     ("cli", 6),
     ("web", 6),
 ];

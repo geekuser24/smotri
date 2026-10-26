@@ -26,7 +26,7 @@ prefix="$(realpath -m -- "$prefix")"
 source_dir="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd -P)"
 case "$prefix/" in "$source_dir/"*) fail 'choose an installation prefix outside the extracted tarball' ;; esac
 app_id=ai.storyteller.filmcraft
-for binary in filmcraft filmcraft-cli; do
+for binary in filmcraft filmcraft-cli filmcraft-audio-plugin-host; do
   [[ -f "$source_dir/bin/$binary" ]] || fail "missing bin/$binary; extract the complete tarball first"
 done
 [[ -f "$source_dir/share/applications/$app_id.desktop" ]] || fail 'missing desktop entry; extract the complete tarball first'
@@ -34,6 +34,7 @@ done
 mkdir -p -- "$prefix/bin" "$prefix/share"
 install -m755 -- "$source_dir/bin/filmcraft" "$prefix/bin/filmcraft"
 install -m755 -- "$source_dir/bin/filmcraft-cli" "$prefix/bin/filmcraft-cli"
+install -m755 -- "$source_dir/bin/filmcraft-audio-plugin-host" "$prefix/bin/filmcraft-audio-plugin-host"
 cp -R -- "$source_dir/share/." "$prefix/share/"
 
 # Use an absolute path so launching from the application menu does not depend on PATH.

@@ -140,7 +140,7 @@ pub(crate) fn export(
         let track = mux.add_track(track).map_err(|e| ExportError::Io(e.to_string()))?;
         Sink::Mp4 { mux, track, frame: enc.frame_size() }
     };
-    while let Some(planar) = a.pull(a.out.saturating_add(chunk), sources) {
+    while let Some(planar) = a.pull(a.out.saturating_add(chunk), sources)? {
         if cancelled() {
             return Err(ExportError::Cancelled);
         }

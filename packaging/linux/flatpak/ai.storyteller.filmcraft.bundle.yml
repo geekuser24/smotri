@@ -47,6 +47,7 @@ modules:
     build-commands:
       - install -Dm755 bin/filmcraft /app/bin/filmcraft
       - install -Dm755 bin/filmcraft-cli /app/bin/filmcraft-cli
+      - install -Dm755 bin/filmcraft-audio-plugin-host /app/bin/filmcraft-audio-plugin-host
       - install -Dm644 share/applications/ai.storyteller.filmcraft.desktop /app/share/applications/ai.storyteller.filmcraft.desktop
       # The same MIME file the deb/rpm install: it defines the .fcproj project type (the
       # runtime's shared-mime-info already knows the video and audio formats).

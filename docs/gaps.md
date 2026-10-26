@@ -24,7 +24,7 @@ platforms** G4, G9, G17; **performance** G16; **ecosystem** G11; **measurement**
 | G8 | UI fidelity: monitor handles, Effect Controls, docking | UI / UX | partly | 120–200 h |
 | G9 | Windows and Linux at run time | platforms | partly | 50–90 h |
 | G10 | Container and codec gaps on import | file format, codec | partly | 120–200 h |
-| G11 | No plugin hosting | ecosystem | no | 200–400 h |
+| G11 | Partial audio plugin hosting | ecosystem | no | 200–400 h |
 | G12 | AI features | AI | no | 150–300 h |
 | G13 | Delivery formats | file format | no | 60–110 h |
 | G14 | Localization: 3 of the 12 key languages missing | localization | no | 150–230 h |
@@ -204,15 +204,16 @@ platforms** G4, G9, G17; **performance** G16; **ecosystem** G11; **measurement**
 - **Have:** Matroska AAC / MP3 / AC-3 / E-AC-3 sample-aligned with the signal the encoder was
   given (the exact `CodecDelay` is trimmed, not the 1 ms-rounded one; #790).
 
-## G11. No plugin hosting
+## G11. Partial audio plugin hosting
 
-- **Missing:** VST3 / Audio Units, OpenFX, Premiere / After Effects plug-in APIs, UXP panels
+- **Missing:** native plugin editors, instruments/MIDI, external sidechains, OpenFX, Premiere / After Effects plug-in APIs, UXP panels
   (#325).
 - **Impact:** many professional editors depend on third-party effects and audio plug-ins.
 - **Smotri decision (2026-10-26):** the owner approved a separate native audio-plugin
   host with bounded IPC, without loading plugins into the editor. See
-  [ADR 0002](adr/0002-smotri-native-audio-host.md). Implementation and compatibility
-  validation are pending; released builds do not yet host VST3/AU effects.
+  [ADR 0002](adr/0002-smotri-native-audio-host.md). VST2/VST3 and macOS AU
+  mono/stereo effects now use the same isolated path for clips, mixer and export.
+  See [supported scope and verification](audio-plugins.md).
   OpenFX and other plugin APIs remain outside this approval. **200–400 h.**
 
 ## G12. AI features

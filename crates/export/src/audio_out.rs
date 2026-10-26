@@ -40,10 +40,12 @@ pub(crate) struct AudioOut {
     /// End of the range (samples); input past it is silence.
     end: i64,
     pub loudness: Option<LoudnessReport>,
+    plugin_ids: Vec<String>,
 }
 
 impl AudioOut {
     pub fn new(project: Arc<Project>, seq: ItemId, settings: &ExportSettings, range: TimeRange) -> Result<Self> {
+        let plugin_ids = filmcraft_audio_plugin_client::enabled_sequence_ids(&project, seq);
         let q = project.sequence(seq).ok_or(ExportError::NoSequence)?;
         let r = settings.resolve(q.settings.width, q.settings.height, q.settings.frame_rate, q.settings.sample_rate);
         let mut seq = q.clone();
@@ -61,7 +63,20 @@ impl AudioOut {
             l
         });
         let latency = limiter.as_ref().map(|l| l.latency() as i64).unwrap_or(0);
-        Ok(AudioOut { project, seq, sr, channels: r.channels as usize, gain: 1.0, limiter, latency, next_in: start, out: start, end, loudness: None })
+        Ok(AudioOut {
+            plugin_ids,
+            project,
+            seq,
+            sr,
+            channels: r.channels as usize,
+            gain: 1.0,
+            limiter,
+            latency,
+            next_in: start,
+            out: start,
+            end,
+            loudness: None,
+        })
     }
 
     /// The loudness pass: measure the integrated loudness of the whole range and set the gain
@@ -78,7 +93,7 @@ impl AudioOut {
                 return Err(ExportError::Cancelled);
             }
             let n = (self.end - pos).min(self.sr as i64) as usize;
-            let buf = self.mix(pos, n, sources);
+            let buf = self.mix(pos, n, sources)?;
             let refs: Vec<&[f32]> = buf.iter().map(Vec::as_slice).collect();
             meter.process(&refs);
             pos += n as i64;
@@ -103,7 +118,7 @@ impl AudioOut {
                         return Err(ExportError::Cancelled);
                     }
                     let until = self.out.saturating_add(self.sr as i64).min(self.end);
-                    if let Some(buf) = self.pull(until, sources) {
+                    if let Some(buf) = self.pull(until, sources)? {
                         let refs: Vec<&[f32]> = buf.iter().map(Vec::as_slice).collect();
                         limited.process(&refs);
                     }
@@ -144,7 +159,7 @@ impl AudioOut {
     /// Mix `n` samples from `pos`, folded to the output channels (silence past the range end).
     /// Stereo output of a 5.1 Mix is the ITU-R BS.775 downmix; 5.1 output of a stereo Mix places it
     /// on L and R; 5.1 is in L, R, C, LFE, Ls, Rs order.
-    fn mix(&self, pos: i64, n: usize, sources: &dyn SourceProvider) -> Vec<Vec<f32>> {
+    fn mix(&self, pos: i64, n: usize, sources: &dyn SourceProvider) -> Result<Vec<Vec<f32>>> {
         let real = (self.end - pos).clamp(0, n as i64) as usize;
         let out_ch = if self.channels == 6 { 6 } else { 2 };
         let mut st = if real > 0 {
@@ -166,18 +181,19 @@ impl AudioOut {
         for c in st.iter_mut() {
             c.resize(n, 0.0);
         }
-        if self.channels == 1 { vec![st[0].iter().zip(&st[1]).map(|(l, r)| 0.5 * (l + r)).collect()] } else { st }
+        filmcraft_audio_plugin_client::check_ids(&self.plugin_ids).map_err(ExportError::Encode)?;
+        Ok(if self.channels == 1 { vec![st[0].iter().zip(&st[1]).map(|(l, r)| 0.5 * (l + r)).collect()] } else { st })
     }
 
     /// Output samples up to `until` (exclusive), planar; None when there is nothing new.
-    pub fn pull(&mut self, until: i64, sources: &dyn SourceProvider) -> Option<Vec<Vec<f32>>> {
+    pub fn pull(&mut self, until: i64, sources: &dyn SourceProvider) -> Result<Option<Vec<Vec<f32>>>> {
         let until = until.min(self.end);
         if until <= self.out {
-            return None;
+            return Ok(None);
         }
         let want_in = until + self.latency;
         let n_in = (want_in - self.next_in).max(0) as usize;
-        let mut buf = self.mix(self.next_in, n_in, sources);
+        let mut buf = self.mix(self.next_in, n_in, sources)?;
         // the first call also fills the limiter's look-ahead
         let drop = (self.latency - (self.next_in - self.out)).clamp(0, n_in as i64) as usize;
         self.next_in = want_in;
@@ -194,7 +210,7 @@ impl AudioOut {
             c.resize(n_out, 0.0);
         }
         self.out = until;
-        Some(buf)
+        Ok(Some(buf))
     }
 
     /// Output samples still to come (per channel).
@@ -203,7 +219,7 @@ impl AudioOut {
     }
 
     /// Everything still to come (to the end of the range).
-    pub fn rest(&mut self, sources: &dyn SourceProvider) -> Option<Vec<Vec<f32>>> {
+    pub fn rest(&mut self, sources: &dyn SourceProvider) -> Result<Option<Vec<Vec<f32>>>> {
         self.pull(self.end, sources)
     }
 }

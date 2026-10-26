@@ -30,6 +30,19 @@ fn f(e: &EffectInstance, id: &str, mt: Tick) -> f32 {
 }
 
 pub(crate) fn mapping(id: &str) -> Option<Mapping> {
+    if id.starts_with("installed_audio_") {
+        return Some(Mapping {
+            dsp: "installed_audio",
+            preroll: |_, _| 0.25,
+            apply: |d, e, t| {
+                for (id, p) in &e.params {
+                    if id != filmcraft_project::audio_plugin::STATE_PARAM {
+                        let _ = d.set_param(id, p.f64_at(t) as f32);
+                    }
+                }
+            },
+        });
+    }
     Some(match id {
         "amplify" => Mapping { dsp: "amplify", preroll: |_, _| 0.0, apply: |d, e, t| ignore(d.set_param("gain", f(e, "gain", t))) },
         "dynamics" => Mapping {
@@ -266,7 +279,7 @@ fn direct(d: &mut dyn AudioEffect, e: &EffectInstance, t: Tick) {
 /// effect editors: [`AudioEffect::response_db`] / [`AudioEffect::transfer_db`]).
 pub fn configured(e: &EffectInstance, t: Tick, sample_rate: u32) -> Option<Box<dyn AudioEffect>> {
     let m = mapping(&e.effect)?;
-    let mut d = filmcraft_audio_dsp::create_effect(m.dsp, sample_rate as f32, 2)?;
+    let mut d = create_processor(e, &m, sample_rate, 2)?;
     (m.apply)(d.as_mut(), e, t);
     Some(d)
 }
@@ -304,6 +317,7 @@ pub fn has_effects(item: &TrackItem) -> bool {
 }
 
 struct Chain {
+    native: bool,
     fx: Vec<Box<dyn AudioEffect>>,
     latency: usize,
     /// Next timeline sample this chain will output.
@@ -323,6 +337,9 @@ fn structure_hash(item: &TrackItem) -> u64 {
     for (e, m) in active(item) {
         e.effect.hash(&mut h);
         m.dsp.hash(&mut h);
+        if m.dsp == "installed_audio" {
+            format!("{:?}", e.param(filmcraft_project::audio_plugin::STATE_PARAM)).hash(&mut h);
+        }
     }
     h.finish()
 }
@@ -359,7 +376,19 @@ pub fn process(item: &TrackItem, a0: i64, n: usize, sr: u32, read: &dyn Fn(i64, 
     let key = (item.id.0, structure_hash(item), sr, width);
     let taken = {
         let mut c = cache().lock().unwrap_or_else(|e| e.into_inner());
-        c.get_mut(&key).and_then(|v| v.iter().position(|ch| ch.next_out == a0).map(|i| v.swap_remove(i)))
+        let taken = c.get_mut(&key).and_then(|v| v.iter().position(|ch| ch.next_out == a0).map(|i| v.swap_remove(i)));
+        // Release stale native instances before creating replacements (seeks/parameter edits).
+        c.retain(|k, v| {
+            v.retain(|ch| !ch.native || (k.0 != key.0));
+            !v.is_empty()
+        });
+        if taken.is_none() && c.values().flatten().filter(|ch| ch.native).count() >= 8 {
+            c.retain(|_, v| {
+                v.retain(|ch| !ch.native);
+                !v.is_empty()
+            });
+        }
+        taken
     };
     let (mut chain, mut input, skip) = match taken {
         Some(chain) => {
@@ -372,13 +401,13 @@ pub fn process(item: &TrackItem, a0: i64, n: usize, sr: u32, read: &dyn Fn(i64, 
             let pre_s = act.iter().map(|(e, m)| (m.preroll)(e, mt)).fold(0.0, f64::max);
             let pre = (pre_s * sr as f64).ceil() as usize;
             let mut fx: Vec<Box<dyn AudioEffect>> = Vec::new();
-            for (_, m) in &act {
-                if let Some(d) = filmcraft_audio_dsp::create_effect(m.dsp, sr as f32, width) {
+            for (e, m) in &act {
+                if let Some(d) = create_processor(e, m, sr, width) {
                     fx.push(d);
                 }
             }
             let latency = fx.iter().map(|d| d.latency()).sum::<usize>();
-            let chain = Chain { fx, latency, next_out: a0 - pre as i64 };
+            let chain = Chain { native: act.iter().any(|(_, m)| m.dsp == "installed_audio"), fx, latency, next_out: a0 - pre as i64 };
             let x0 = a0 - pre as i64;
             (chain, read(x0 + latency as i64, pre + n), pre)
         }
@@ -390,13 +419,25 @@ pub fn process(item: &TrackItem, a0: i64, n: usize, sr: u32, read: &dyn Fn(i64, 
     let mut c = cache().lock().unwrap_or_else(|e| e.into_inner());
     let v = c.entry(key).or_default();
     v.push(chain);
-    if v.len() > 4 {
+    if v.len() > if item.effects.iter().any(|e| e.effect.starts_with("installed_audio_")) { 1 } else { 4 } {
         v.remove(0);
     }
     if c.len() > 256 {
         c.clear();
     }
     out
+}
+
+pub(crate) fn create_processor(e: &EffectInstance, m: &Mapping, sr: u32, width: usize) -> Option<Box<dyn AudioEffect>> {
+    if m.dsp == "installed_audio" {
+        Some(filmcraft_audio_plugin_client::create(e, sr, width))
+    } else {
+        filmcraft_audio_dsp::create_effect(m.dsp, sr as f32, width)
+    }
+}
+
+pub fn clear_cache() {
+    cache().lock().unwrap_or_else(|e| e.into_inner()).clear();
 }
 
 #[cfg(test)]

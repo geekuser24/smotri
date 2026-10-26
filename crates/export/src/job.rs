@@ -484,7 +484,7 @@ impl Exporter {
             return Ok(Step::Progress);
         }
         let finishing = web_time::Instant::now();
-        let mixed = self.audio.as_mut().and_then(|a| a.rest(sources));
+        let mixed = self.audio.as_mut().map(|a| a.rest(sources)).transpose()?.flatten();
         if filmcraft_media::pending::take() {
             return Ok(Step::Pending);
         }
@@ -636,7 +636,7 @@ impl Exporter {
             let t = web_time::Instant::now();
             for &g in &cuts {
                 let until = self.sample_at_frame(g, sr);
-                mixed.push(self.audio.as_mut().and_then(|a| a.pull(until, sources)));
+                mixed.push(self.audio.as_mut().map(|a| a.pull(until, sources)).transpose()?.flatten());
             }
             note_stage(Stage::Audio, t.elapsed());
         }

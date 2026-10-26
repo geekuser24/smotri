@@ -67,6 +67,9 @@ contents:
   - src: ${STAGE}/usr/bin/filmcraft-cli
     dst: /usr/bin/filmcraft-cli
     file_info: { mode: 0755 }
+  - src: ${STAGE}/usr/bin/filmcraft-audio-plugin-host
+    dst: /usr/bin/filmcraft-audio-plugin-host
+    file_info: { mode: 0755 }
   - src: ${STAGE}/usr/share/
     dst: /usr/share/
     type: tree

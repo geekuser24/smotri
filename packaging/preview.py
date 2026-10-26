@@ -54,12 +54,20 @@ def main():
     cli = stage / ('Smotri-cli' + suffix)
     shutil.copy2(binary / ('filmcraft-cli' + suffix), cli)
     cli.chmod(0o755)
-    for name in ('LICENSE-MIT', 'LICENSE-APACHE', 'NOTICE', 'CHANGELOG-SMOTRI.md'):
+    helper = executable.parent / ('filmcraft-audio-plugin-host' + suffix)
+    shutil.copy2(binary / ('filmcraft-audio-plugin-host' + suffix), helper)
+    helper.chmod(0o755)
+    helpers = [helper]
+    if mac:
+        cli_helper = stage / 'filmcraft-audio-plugin-host'
+        shutil.copy2(helper, cli_helper)
+        helpers.append(cli_helper)
+    for name in ('LICENSE-MIT', 'LICENSE-APACHE', 'NOTICE', 'THIRD-PARTY-AUDIO-PLUGINS.txt', 'CHANGELOG-SMOTRI.md'):
         shutil.copy2(root / name, stage / name)
     manifest = {'version': args.version, 'commit': args.sha, 'target': args.target,
                 'channel': 'preview', 'downloader_bundled': False,
                 'sha256': {str(p.relative_to(stage)): hashlib.sha256(p.read_bytes()).hexdigest()
-                           for p in (executable, cli)}}
+                           for p in (executable, cli, *helpers)}}
     (stage / 'README.txt').write_text(
         'Smotri preview / Предварительная сборка\n'
         'https://smotri.cc | https://github.com/geekuser24/smotri\n\n'
@@ -71,10 +79,10 @@ def main():
         'Other editor features are available; see CHANGELOG-SMOTRI.md and feature documentation.\n'
         'API keys must be entered by the user. No author credentials are included.\n', encoding='utf-8')
     if mac:
-        for path in (executable, cli, app):
+        for path in (*helpers, executable, cli, app):
             subprocess.run(['codesign', '--force', '--sign', '-', '--timestamp=none', str(path)], check=True)
         subprocess.run(['codesign', '--verify', '--strict', '--deep', str(app)], check=True)
-        manifest['sha256'] = {str(p.relative_to(stage)): hashlib.sha256(p.read_bytes()).hexdigest() for p in (executable, cli)}
+        manifest['sha256'] = {str(p.relative_to(stage)): hashlib.sha256(p.read_bytes()).hexdigest() for p in (executable, cli, *helpers)}
     (stage / 'BUILD.json').write_text(json.dumps(manifest, indent=2) + '\n')
     out = root / 'dist' / 'preview'
     out.mkdir(parents=True, exist_ok=True)

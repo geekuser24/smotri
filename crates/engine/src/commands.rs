@@ -3544,6 +3544,7 @@ fn build() -> Vec<CommandSpec> {
     v.extend(crate::voice_edit::commands());
     v.extend(crate::voice_transcript::commands());
     v.extend(crate::audio_cleanup::commands());
+    v.extend(crate::audio_plugins::commands());
     v.extend(crate::panels::commands());
     v.extend(crate::scopes::commands());
     v.extend(crate::remix::commands());
@@ -4008,8 +4009,8 @@ fn list_effects(p: &Value) -> Value {
     let kind = str_p(p, "kind");
     let folder = str_p(p, "folder");
     let detail = p.get("detail").and_then(Value::as_bool).unwrap_or(false);
-    let out = filmcraft_project::effect_defs()
-        .iter()
+    let out = filmcraft_project::effect::all_effect_defs()
+        .into_iter()
         .filter(|d| kind.is_none_or(|k| format!("{:?}", d.kind).eq_ignore_ascii_case(k)))
         .filter(|d| folder.is_none_or(|f| d.category.join("/").starts_with(f)))
         .map(|d| {

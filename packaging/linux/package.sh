@@ -48,9 +48,9 @@ echo "==> Smotri $VERSION for Linux $ARCH ($FORMATS)"
 
 if [[ "$SKIP_BUILD" = 0 ]]; then
   if [[ -n "${CROSS_TARGET:-}" ]]; then
-    (cd "$ROOT" && cargo build --release --locked -p filmcraft -p filmcraft-cli --target "$CROSS_TARGET")
+    (cd "$ROOT" && cargo build --release --locked -p filmcraft -p filmcraft-cli -p filmcraft-audio-plugin-host --target "$CROSS_TARGET")
   else
-    (cd "$ROOT" && cargo build --release --locked -p filmcraft -p filmcraft-cli)
+    (cd "$ROOT" && cargo build --release --locked -p filmcraft -p filmcraft-cli -p filmcraft-audio-plugin-host)
   fi
 fi
 BIN="$CARGO_TARGET_DIR/${CROSS_TARGET:+$CROSS_TARGET/}release"
@@ -61,6 +61,7 @@ rm -rf "$WORK"
 # ---- stage an FHS tree (shared by every format) -------------------------------------------------
 install -Dm755 "$BIN/filmcraft" "$STAGE/usr/bin/filmcraft"
 install -Dm755 "$BIN/filmcraft-cli" "$STAGE/usr/bin/filmcraft-cli"
+install -Dm755 "$BIN/filmcraft-audio-plugin-host" "$STAGE/usr/bin/filmcraft-audio-plugin-host"
 "${CROSS_COMPILE:-}strip" "$STAGE/usr/bin/filmcraft" "$STAGE/usr/bin/filmcraft-cli" 2>/dev/null || true
 install -Dm644 "$HERE/$APP_ID.desktop" "$STAGE/usr/share/applications/$APP_ID.desktop"
 install -Dm644 "$HERE/$APP_ID.mime.xml" "$STAGE/usr/share/mime/packages/$APP_ID.xml"

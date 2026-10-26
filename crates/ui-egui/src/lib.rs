@@ -2204,6 +2204,15 @@ impl eframe::App for FilmcraftApp {
     }
 
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        if self.playback.playing
+            && let Some(seq) = self.session.state.active_sequence
+        {
+            let ids = filmcraft_audio_plugin_client::enabled_sequence_ids(&self.session.project, seq);
+            if let Err(error) = filmcraft_audio_plugin_client::check_ids(&ids) {
+                self.stop();
+                self.ui.status = error;
+            }
+        }
         // a native file dialog's answer first, so the panels draw what it chose (#260)
         self.poll_native_dialog(ctx);
         if !self.control_input_only

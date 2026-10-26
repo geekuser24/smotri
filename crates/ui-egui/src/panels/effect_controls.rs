@@ -282,7 +282,7 @@ pub fn show(app: &mut FilmcraftApp, ui: &mut egui::Ui, rect: Rect) {
                 if crate::panels::audio_fx_editor::has_editor(&e.effect) {
                     custom_setup_row(app, bui, body, &lane, clip, idx, &e.effect);
                 }
-                for pd in &def.params {
+                for pd in def.params.iter().filter(|p| p.id != filmcraft_project::audio_plugin::STATE_PARAM) {
                     param_row(app, bui, body, clip, idx, e, None, pd, mt_now, &mut actions, &lane, &lx, it, &mut keys);
                     if app.ui.expanded_fx.contains(&graph_key(clip, idx, pd.id))
                         && let Some(param) = e.params.get(pd.id)
@@ -812,7 +812,7 @@ pub fn lumetri_panel(app: &mut FilmcraftApp, ui: &mut egui::Ui, rect: Rect) {
             if !now_open {
                 continue;
             }
-            for pd in def.params.iter().filter(|p| p.group == Some(g)) {
+            for pd in def.params.iter().filter(|p| p.id != filmcraft_project::audio_plugin::STATE_PARAM).filter(|p| p.group == Some(g)) {
                 let v = e.params.get(pd.id).map(|p| p.value_at(mt)).unwrap_or(pd.default.clone());
                 ui.horizontal(|ui| {
                     ui.add_space(18.0);

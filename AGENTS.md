@@ -50,7 +50,7 @@ panic path, and fix a crash before building on top of it. The cross-app standard
 
 The owner explicitly approved two narrow exceptions to §0.3:
 
-- An isolated audio-plugin host process may use native FFI for installed VST3/AU
+- An isolated audio-plugin host process may use native FFI for installed VST2/VST3/AU
   plugins. The editor, engine and audio IPC client remain safe Rust. No plugin
   library is loaded into the editor. Scan/process failures must be contained,
   reported and bounded by timeouts. Every FFI block requires a SAFETY comment.

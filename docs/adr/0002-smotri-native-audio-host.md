@@ -1,11 +1,11 @@
 # ADR 0002: isolated audio-plugin hosting and Finder open events
 
 Status: native boundaries approved by the Smotri owner on 2026-10-26.
-Implementation and compatibility validation are still in progress.
+First audio-effect host implemented for the 20261026.4 preview. See ../audio-plugins.md for supported scope.
 
 ## Audio plugins
 
-Installed VST3 and Audio Units require a native host. No plugin library may be
+Installed VST2, VST3 and Audio Units require a native host. No plugin library may be
 loaded into the editor process. A separately packaged Rust helper owns all
 native instances and is the only additional target allowed to use unsafe FFI.
 The editor, project, render engine and IPC client retain `unsafe_code = forbid`.
@@ -18,12 +18,12 @@ rescanned. System locations and user-selected locations are scanned; directory
 recursion, candidate count, metadata sizes and IPC messages are bounded. The
 catalog identifies plugins by format and stable native identifier, not name.
 Architecture mismatch is reported rather than attempting to load incompatible
-binaries. Legacy VST2 support requires separate compatibility/license validation;
+binaries. Legacy VST2 uses the MIT vst-rs adapter and is probed before registration;
 finding a `.vst` file alone does not mean it is usable.
 
 The same processing path must serve clip effects, mixer inserts and export.
 Projects preserve identity, parameter values and opaque plugin state, including
-when a plugin is missing. Realtime failures report a bypass explicitly; exports
+when a plugin is missing. Realtime failures mute the processor and stop playback explicitly; exports
 must fail visibly rather than silently produce a mix without an enabled plugin.
 Latency, tails, seeks, rate changes, mono/stereo layouts, automation and state
 restore require tests before release. UI lists categories and manufacturers;

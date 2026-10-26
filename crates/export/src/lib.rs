@@ -477,8 +477,10 @@ impl Out {
             let file = file.try_clone().map_err(|e| ExportError::Io(e.to_string()))?;
             return Ok(Out::File(std::io::BufWriter::new(file)));
         }
-        let f = std::fs::File::create(path).map_err(|e| ExportError::Io(format!("{path}: {e}")))?;
-        Ok(Out::File(std::io::BufWriter::new(f)))
+        // A failed native plugin (or any later encoder failure) must not truncate
+        // the user's previous export. Publish only a successfully finished file.
+        let (file, guard) = size_limit::StagePath::create(path)?;
+        Ok(Out::Staged(std::io::BufWriter::new(file), guard))
     }
 
     /// Flush (and hand in-memory output to the sink); returns the file size.
@@ -1948,7 +1950,7 @@ pub fn export(project: &Arc<Project>, seq: ItemId, settings: &ExportSettings, so
             let io = |e: std::io::Error| ExportError::Io(e.to_string());
             out.write_all(&head).map_err(io)?;
             let mut buf = Vec::new();
-            while let Some(planar) = a.pull(a.out.saturating_add(chunk), sources) {
+            while let Some(planar) = a.pull(a.out.saturating_add(chunk), sources)? {
                 if cancelled() {
                     return Err(ExportError::Cancelled);
                 }

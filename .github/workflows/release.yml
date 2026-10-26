@@ -40,7 +40,7 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y pkg-config libxkbcommon-dev libwayland-dev libx11-dev libxcb1-dev libxcursor-dev libxrandr-dev libxi-dev libfontconfig1-dev libfreetype-dev libasound2-dev libudev-dev
       - name: Build native editor and CLI
-        run: cargo build --release --locked -p filmcraft -p filmcraft-cli --target ${{ matrix.target }}
+        run: cargo build --release --locked -p filmcraft -p filmcraft-cli -p filmcraft-audio-plugin-host --target ${{ matrix.target }}
       - name: Native CLI smoke test
         shell: bash
         run: target/${{ matrix.target }}/release/filmcraft-cli --help
