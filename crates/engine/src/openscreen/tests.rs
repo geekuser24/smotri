@@ -249,3 +249,51 @@ fn full_length_layout_tracks_and_cursor_zoom_are_editable_and_undoable() {
     assert!(s.execute("effects.apply", json!({"effect":"openscreen_zoom","clips":[other.0]})).is_err());
     let _ = std::fs::remove_dir_all(dir);
 }
+
+#[test]
+fn bundled_wallpaper_is_copied_locally_and_cursor_tracks_are_sparse() {
+    let (dir, path) = fixture();
+    let wallpapers = dir.join("wallpapers");
+    std::fs::create_dir_all(&wallpapers).unwrap();
+    image::RgbaImage::from_pixel(8, 8, image::Rgba([10, 40, 70, 255])).save(wallpapers.join("fixture.png")).unwrap();
+    let mut d = document();
+    d["editor"]["wallpaper"] = json!("/wallpapers/fixture.png");
+    std::fs::write(&path, serde_json::to_vec(&d).unwrap()).unwrap();
+    let mut s = Session::default();
+    let result = s.execute("file.open", json!({"path":path})).unwrap();
+    let background = s.project.items.values().find(|i| i.name == "Background").unwrap().as_media().unwrap();
+    let MediaRef::File { path: extracted } = &background.media else { panic!("expected extracted wallpaper") };
+    assert!(Path::new(extracted).starts_with(Path::new(&path).with_extension("openscreen-media")));
+    assert_eq!(std::fs::read(extracted).unwrap(), std::fs::read(wallpapers.join("fixture.png")).unwrap());
+    let pip = s.project.sequence(ItemId(result["compositions"][0].as_u64().unwrap())).unwrap();
+    for (index, values) in [(2, [100., 0.]), (3, [0., 100.])] {
+        let fx = pip.video_tracks[index].items[0].effect("opacity").unwrap();
+        assert!(fx.params["opacity"].keyframes.len() <= 2, "inactive cursor assets need only switches");
+        assert_eq!(fx.f64_at("opacity", ms(750.)), values[0]);
+        assert_eq!(fx.f64_at("opacity", ms(2000.)), values[1]);
+    }
+    for bad in ["/wallpapers/../fixture.png", "/wallpapers/nested/file.png", "/wallpapers/evil.exe"] {
+        assert!(wallpaper::resolve(&s, &path, bad).is_err());
+    }
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn opening_creates_an_unsaved_native_document_and_never_overwrites_the_source() {
+    let (dir, path) = fixture();
+    let original = std::fs::read(&path).unwrap();
+    let mut s = Session::default();
+    s.execute("file.openDemoProject", json!({})).unwrap();
+    let previous = dir.join("previous.fcproj");
+    s.execute("file.saveAs", json!({"path":previous})).unwrap();
+    let previous_bytes = std::fs::read(&previous).unwrap();
+    let r = s.execute("file.open", json!({"path":path})).unwrap();
+    assert!(s.path.is_none(), "Save must request a native project destination");
+    assert!(s.is_dirty());
+    assert_eq!(s.project.name, "take");
+    assert_eq!(s.state.active_sequence.map(|id| id.0), r["sequences"][0].as_u64());
+    assert!(!s.project.items.values().any(|i| i.name == "Main Edit"));
+    assert_eq!(std::fs::read(&path).unwrap(), original);
+    assert_eq!(std::fs::read(&previous).unwrap(), previous_bytes);
+    std::fs::remove_dir_all(dir).unwrap();
+}

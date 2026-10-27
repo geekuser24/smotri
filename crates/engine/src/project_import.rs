@@ -21,7 +21,10 @@ pub fn import(s: &mut Session, path: &str, parent: Option<BinId>) -> Result<Valu
     if bytes.len() > LIMIT {
         return Err(error("Project exceeds the 256 MB import limit"));
     }
-    let mut fragment = filmcraft_format::decode(&bytes).map_err(|e| error(format!("{path}: {e}")))?.project;
+    let loaded = filmcraft_format::decode(&bytes).map_err(|e| error(format!("{path}: {e}")))?;
+    let preferred = loaded.view.as_ref().and_then(|v| v.active_sequence);
+    let mut fragment = loaded.project;
+    let primary_index = fragment.items.values().filter(|i| i.as_sequence().is_some()).position(|i| Some(i.id) == preferred).unwrap_or(0);
     let mut missing = Vec::new();
     for item in fragment.items.values_mut() {
         if let ItemKind::Media(m) = &mut item.kind {
@@ -53,7 +56,9 @@ pub fn import(s: &mut Session, path: &str, parent: Option<BinId>) -> Result<Valu
     let (bin, sequences) = s.edit("Import Project", |target, _| merge(target, fragment.clone(), parent, &name))?;
     s.media.add_stored(&fragment, Some(path));
     s.toast(format!("Imported project: {name} ({} sequences, {} missing media)", sequences.len(), missing.len()));
-    Ok(json!({"bin":bin.0,"sequences":sequences.iter().map(|id| id.0).collect::<Vec<_>>(),"missingMedia":missing}))
+    Ok(
+        json!({"bin":bin.0,"sequences":sequences.iter().map(|id| id.0).collect::<Vec<_>>(),"primarySequence":sequences.get(primary_index).map(|id|id.0),"missingMedia":missing}),
+    )
 }
 
 // IDs share one monotonic namespace. Shift *references as well as definitions*, including

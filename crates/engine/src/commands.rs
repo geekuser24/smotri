@@ -1575,7 +1575,7 @@ fn build() -> Vec<CommandSpec> {
         ),
         cmd!("file.open", "Open Project…", ["File"], Some("Cmd+O"), r#"{"path":str}"#, always, |s, p| {
             let path = str_p(p, "path").ok_or_else(|| bad("file.open", "need `path`"))?.to_string();
-            if crate::openscreen::is_project(&path) { crate::openscreen::import(s, &path) } else { open_project(s, &path) }
+            if crate::openscreen::is_project(&path) { open_openscreen(s, &path) } else { open_project(s, &path) }
         }),
         cmd!("file.recover", "Recover Unsaved Changes…", ["File"], None, r#"{"id":str?}"#, has_recovery, |s, p| recover(s, str_p(p, "id"))),
         cmd!("file.discardRecovery", "Discard Unsaved Changes", [], None, r#"{"id":str?,"all":bool?}"#, has_recovery, |s, p| {
@@ -4606,6 +4606,24 @@ fn install_project(s: &mut Session, proj: filmcraft_project::Project, path: Opti
     s.loaded_schema = filmcraft_format::SCHEMA_VERSION;
     s.events.push(crate::Event::ProjectChanged { revision: s.revision });
     crate::project_tools::warn_untrusted_scratch(s);
+}
+
+fn open_openscreen(s: &mut Session, path: &str) -> Result<Value> {
+    // Build separately first: a missing recording or bad document must not replace current work.
+    let mut imported = Session::new(s.services.clone());
+    let result = crate::openscreen::import(&mut imported, path)?;
+    let mut project = (*imported.project).clone();
+    project.name = std::path::Path::new(path).file_stem().and_then(|s| s.to_str()).unwrap_or("OpenScreen").into();
+    imported.media.set_use_proxies(s.media.use_proxies());
+    install_project(s, project, None, false);
+    s.media = imported.media;
+    s.state = imported.state;
+    s.events.extend(imported.events.into_iter().filter(|e| matches!(e, crate::Event::Toast { .. })));
+    if let Some(seq) = s.state.active_sequence {
+        s.events.push(crate::Event::OpenSequence(seq));
+    }
+    crate::relink::on_open(s);
+    Ok(result)
 }
 
 fn open_project(s: &mut Session, path: &str) -> Result<Value> {

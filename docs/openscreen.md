@@ -1,8 +1,12 @@
 # OpenScreen projects
 
-File → Import or File → Open accepts OpenScreen v2 `.openscreen` projects. Import is
-one undoable edit, adding a project bin and opening its main sequence. Existing
-sequences are retained. The original OpenScreen document is never rewritten.
+File → Import or File → Open accepts OpenScreen v2 `.openscreen` projects. Open
+creates an unsaved native document after validating the recording; Save As writes a
+new `.fcproj`. Import is one undoable edit that adds a project bin and retains
+existing sequences. Dropping a project onto the timeline inserts its main sequence
+as a nested clip, using available tracks; an empty timeline gets a new sequence.
+Dropping a native `.fcproj` uses its saved active sequence. The original document
+is never rewritten. macOS Open With and command-line opening also accept `.openscreen`.
 
 The main sequence has full-length video tracks for Picture in picture, Dual screen,
 Desktop and Webcam (camera-dependent variants are omitted without a camera). Only
@@ -44,6 +48,10 @@ Supported data:
 - Trimmed ranges and speed regions, applied to linked nested video and audio.
 - Embedded PNG/JPEG/WebP wallpaper and cursor images, extracted next to the document
   into `<name>.openscreen-media/` without overwriting existing files.
+- Built-in `/wallpapers/...` images resolved from an installed OpenScreen or a
+  `wallpapers` folder beside the project, then copied into that media folder.
+- Sparse cursor visibility switches: only the currently visible cursor receives
+  motion keys, so recordings with many cursor shapes do not multiply animation data.
 
 Keep the original screen/camera files and `<screen filename>.cursor.json` beside the
 project (or at their stored paths). Save the imported result as `.fcproj`; it can

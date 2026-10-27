@@ -1535,7 +1535,11 @@ impl FilmcraftApp {
         }
         if !paths.is_empty() {
             let pointer = self.drop_pointer(ctx);
+            let target_sequence = self.session.state.active_sequence;
             let imported = self.session.execute("file.import", json!({"paths": paths, "bin": self.import_bin().0}));
+            // OS drops import into the current workspace. The timeline decides placement
+            // once its geometry is available; never nest a newly imported sequence in itself.
+            self.session.state.active_sequence = target_sequence;
             if let Err(e) = &imported {
                 self.ui.status = e.to_string();
             }
@@ -1543,8 +1547,19 @@ impl FilmcraftApp {
                 && let Some(pos) = pointer
                 && self.session.prefs.timeline.drop_import_to_timeline
             {
-                let items: Vec<filmcraft_engine::project::ItemId> =
+                let mut items: Vec<filmcraft_engine::project::ItemId> =
                     v["items"].as_array().map(|a| a.iter().filter_map(|i| i.as_u64()).map(filmcraft_engine::project::ItemId).collect()).unwrap_or_default();
+                if let Some(documents) = v["documents"].as_array() {
+                    for document in documents {
+                        if let Some(primary) = document["primarySequence"].as_u64() {
+                            items.push(filmcraft_engine::project::ItemId(primary));
+                        } else if let Some(sequences) = document["sequences"].as_array() {
+                            items.extend(sequences.iter().filter_map(|i| i.as_u64()).map(filmcraft_engine::project::ItemId));
+                        }
+                    }
+                }
+                let mut seen = std::collections::BTreeSet::new();
+                items.retain(|id| Some(*id) != self.session.state.active_sequence && seen.insert(*id));
                 if !items.is_empty() {
                     self.pending_timeline_drop = Some((items, pos));
                 }

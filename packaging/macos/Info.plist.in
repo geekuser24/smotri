@@ -54,6 +54,13 @@
   <key>CFBundleDocumentTypes</key>
   <array>
     <dict>
+      <key>CFBundleTypeName</key><string>OpenScreen Project</string>
+      <key>CFBundleTypeRole</key><string>Viewer</string>
+      <key>LSHandlerRank</key><string>Alternate</string>
+      <key>CFBundleTypeExtensions</key><array><string>openscreen</string></array>
+      <key>LSItemContentTypes</key><array><string>cc.smotri.openscreen-project</string></array>
+    </dict>
+    <dict>
       <key>CFBundleTypeName</key>
       <string>Smotri Project</string>
       <key>CFBundleTypeRole</key>
@@ -66,6 +73,17 @@
       <array>
         <string>ai.storyteller.filmcraft.project</string>
       </array>
+    </dict>
+  </array>
+
+  <key>UTImportedTypeDeclarations</key>
+  <array>
+    <dict>
+      <key>UTTypeIdentifier</key><string>cc.smotri.openscreen-project</string>
+      <key>UTTypeDescription</key><string>OpenScreen Project</string>
+      <key>UTTypeConformsTo</key><array><string>public.json</string></array>
+      <key>UTTypeTagSpecification</key>
+      <dict><key>public.filename-extension</key><array><string>openscreen</string></array></dict>
     </dict>
   </array>
 

@@ -27,7 +27,7 @@ fn tmp_dir(name: &str) -> PathBuf {
 }
 
 /// A 24 fps ProRes movie of a demo scene (our own encoder).
-fn make_movie(path: &Path, scene: DemoScene, w: u32, h: u32, frames: i64) {
+pub(super) fn make_movie(path: &Path, scene: DemoScene, w: u32, h: u32, frames: i64) {
     let rate = FrameRate::FPS_24;
     let dur = rate.tick_of(frames);
     let src = GeneratorSource::new(Generator::Demo(scene), w, h, rate, dur);

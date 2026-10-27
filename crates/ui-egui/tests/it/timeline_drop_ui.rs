@@ -357,3 +357,47 @@ fn repeated_external_drops_preserve_occupied_track_and_allocate_free_layer() {
     assert_eq!(q.video_tracks.iter().map(|t| t.items.len()).sum::<usize>(), 2);
     assert!(q.video_tracks.iter().skip(1).any(|t| !t.items.is_empty()));
 }
+
+#[test]
+fn native_project_drop_places_only_the_saved_active_sequence() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("source.fcproj");
+    let mut source = Session::default();
+    source.execute("file.openDemoProject", json!({})).unwrap();
+    let original = source.state.active_sequence.unwrap();
+    source.execute("file.newSequence", json!({"fromItems":[original.0],"name":"Preferred"})).unwrap();
+    source.execute("file.saveAs", json!({"path":path})).unwrap();
+    let bytes = std::fs::read(&path).unwrap();
+    let mut h = harness();
+    let destination = h.state().session.state.active_sequence;
+    drop_on_row(&mut h, "timeline.track.V1.target", &path);
+    assert_eq!(h.state().session.state.active_sequence, destination);
+    assert_eq!(clip_counts(&h), (1, 1), "only one nested composition, not all source sequences");
+    let q = h.state().session.active_sequence().unwrap();
+    let nested = q.video_tracks[0].items[0].item;
+    assert_eq!(h.state().session.project.item(nested).unwrap().name, "Preferred");
+    assert_ne!(Some(nested), destination);
+    assert_eq!(std::fs::read(path).unwrap(), bytes);
+}
+
+#[test]
+fn openscreen_drop_places_main_sequence_without_self_nesting() {
+    let dir = tempfile::tempdir().unwrap();
+    let movie = dir.path().join("screen.mov");
+    super::media_ui::make_movie(&movie, filmcraft_media::DemoScene::Aurora, 64, 36, 24);
+    let path = dir.path().join("take.openscreen");
+    std::fs::write(&path, serde_json::to_vec(&json!({"version":2,"media":{"screenVideoPath":movie},"editor":{}})).unwrap()).unwrap();
+    let mut h = harness();
+    let destination = h.state().session.state.active_sequence;
+    drop_on_row(&mut h, "timeline.track.V1.target", &path);
+    assert_eq!(h.state().session.state.active_sequence, destination);
+    assert_eq!(clip_counts(&h), (1, 1), "{}", h.state().ui.status);
+    let nested = h.state().session.active_sequence().unwrap().video_tracks[0].items[0].item;
+    assert_ne!(Some(nested), destination);
+    assert_eq!(h.state().session.project.sequence(nested).unwrap().video_tracks.len(), 2);
+    let mut empty = empty_harness();
+    drop_on_empty_timeline(&mut empty, &path);
+    assert_eq!(clip_counts(&empty), (1, 1), "{}", empty.state().ui.status);
+    let q = empty.state().session.active_sequence().unwrap();
+    assert_ne!(Some(q.video_tracks[0].items[0].item), empty.state().session.state.active_sequence);
+}

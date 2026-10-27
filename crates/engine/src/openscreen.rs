@@ -4,6 +4,7 @@ mod model;
 mod motion;
 #[cfg(test)]
 mod tests;
+mod wallpaper;
 
 use crate::{EngineError, Result, Session};
 use base64::Engine as _;
@@ -290,7 +291,9 @@ pub fn import(s: &mut Session, path: &str) -> Result<Value> {
     let settings = SequenceSettings { width: ratio.0, height: ratio.1, frame_rate, preset: "OpenScreen".into(), ..Default::default() };
     settings.validate().map_err(error)?;
     let estimated_frames = (duration.0 / settings.frame_rate.frame_duration().0) as usize;
-    if estimated_frames.saturating_mul(cursor.assets.len().saturating_add(3)) > 1_000_000 {
+    // Desktop, camera and the single visible cursor can animate at each frame.
+    // Inactive cursor assets only need visibility switches, not per-frame work.
+    if estimated_frames.saturating_mul(3).saturating_add(cursor.assets.len()) > 1_000_000 {
         return Err(error("too many animated layers for editable import; split the recording into shorter projects"));
     }
 
@@ -303,7 +306,7 @@ pub fn import(s: &mut Session, path: &str) -> Result<Value> {
         let file = embedded(s, path, "background", &e.wallpaper)?;
         Some(source(s, &mut p, media_bin, file, "Background")?)
     } else if !e.wallpaper.is_empty() && !e.wallpaper.starts_with('#') {
-        let file = resolve(path, &e.wallpaper);
+        let file = wallpaper::resolve(s, path, &e.wallpaper)?;
         Some(source(s, &mut p, media_bin, file, "Background")?)
     } else {
         None
@@ -420,6 +423,10 @@ pub fn import(s: &mut Session, path: &str) -> Result<Value> {
             }
             let mut cursors: Vec<TrackItem> =
                 assets.iter().map(|a| clip(&mut p, a.id, TrackKind::Video, Tick::ZERO, len, Tick::ZERO, &settings)).collect::<Result<_>>()?;
+            for c in &mut cursors {
+                opacity(c, Tick::ZERO, 0.);
+            }
+            let mut visible_cursor = None;
             let from = frames.partition_point(|f| f.at < start);
             let to = frames.partition_point(|f| f.at < end);
             for f in frames.get(from..to).unwrap_or_default() {
@@ -470,16 +477,24 @@ pub fn import(s: &mut Session, path: &str) -> Result<Value> {
                         opacity(c, ct, 0.);
                     }
                 }
-                for (i, c) in cursors.iter_mut().enumerate() {
-                    let visible = mode != "webcam-only" && f.asset == Some(i) && f.cursor.is_some();
-                    opacity(c, local, if visible { 100. } else { 0. });
-                    if let (true, Some(point), Some(asset)) = (visible, f.cursor, cursor.assets.get(i)) {
-                        let rect = f.layout.screen;
-                        let x = rect.x + (point.cx - e.crop_region.x) / e.crop_region.width * rect.width;
-                        let y = rect.y + (point.cy - e.crop_region.y) / e.crop_region.height * rect.height;
-                        let k = e.cursor_size * f.bounce * f.zoom.k * rect.width / (screen_size.0 * e.crop_region.width * asset.scale_factor);
-                        transform(c, local, k, x * f.zoom.k + f.zoom.x, y * f.zoom.k + f.zoom.y, Vec2::new(asset.hotspot_x, asset.hotspot_y));
+                let next_cursor = f.asset.filter(|_| mode != "webcam-only" && f.cursor.is_some());
+                if visible_cursor != next_cursor {
+                    if let Some(c) = visible_cursor.and_then(|i: usize| cursors.get_mut(i)) {
+                        opacity(c, local, 0.);
                     }
+                    if let Some(c) = next_cursor.and_then(|i| cursors.get_mut(i)) {
+                        opacity(c, local, 100.);
+                    }
+                    visible_cursor = next_cursor;
+                }
+                if let Some(i) = next_cursor
+                    && let (Some(c), Some(point), Some(asset)) = (cursors.get_mut(i), f.cursor, cursor.assets.get(i))
+                {
+                    let rect = f.layout.screen;
+                    let x = rect.x + (point.cx - e.crop_region.x) / e.crop_region.width * rect.width;
+                    let y = rect.y + (point.cy - e.crop_region.y) / e.crop_region.height * rect.height;
+                    let k = e.cursor_size * f.bounce * f.zoom.k * rect.width / (screen_size.0 * e.crop_region.width * asset.scale_factor);
+                    transform(c, local, k, x * f.zoom.k + f.zoom.x, y * f.zoom.k + f.zoom.y, Vec2::new(asset.hotspot_x, asset.hotspot_y));
                 }
             }
             let mut bg = if let Some(bg) = &wallpaper {
