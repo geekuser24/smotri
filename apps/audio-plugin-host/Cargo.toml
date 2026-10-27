@@ -15,7 +15,7 @@ filmcraft-project = { workspace = true }
 serde_json = { workspace = true }
 vst3 = "0.3"
 vst = { version = "0.4", features = ["disable_deprecation_warning"] }
-libloading = "0.8"
+libloading = "0.9"
 plist = "1"
 
 [target.'cfg(target_os = "macos")'.dependencies]
