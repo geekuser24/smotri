@@ -108,6 +108,7 @@ const NEW_IDS: &[&str] = &[
     "auto_reframe",
     "camera_shake",
     "shaker",
+    "openscreen_zoom",
     "grow",
     "shrink",
     "move",

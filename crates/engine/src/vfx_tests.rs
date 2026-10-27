@@ -67,8 +67,9 @@ fn effects_list_reports_folders_and_badges() {
     assert_eq!(find("lens_flare")["folder"], "Lights & Glows");
     let n =
         arr.iter().filter(|e| e["kind"] == "Video" && e["category"][0] == "Video Effects" && e["folder"] != "Obsolete" && e["folder"] != Value::Null).count();
-    assert_eq!(n, 94, "93 catalogue effects plus Smotri Shaker");
+    assert_eq!(n, 95, "93 catalogue effects plus Smotri Shaker and OpenScreen Zoom");
     assert_eq!(find("shaker")["folder"], "Transform");
+    assert_eq!(find("openscreen_zoom")["folder"], "Transform");
 }
 
 #[test]
@@ -76,6 +77,17 @@ fn every_video_effect_applies_by_id_and_name_and_renders() {
     let mut s = demo();
     let clip = first_v1_clip(&s);
     for d in video_effects() {
+        if d.id == "openscreen_zoom" {
+            // This composition effect needs imported desktop/cursor layers; ordinary media
+            // must fail without an edit. The OpenScreen fixture tests application and render.
+            let before = s.project.clone();
+            for name in [d.id, d.name] {
+                let e = s.execute("effects.apply", json!({"clips": [clip], "effect": name})).unwrap_err();
+                assert!(e.to_string().contains("Picture in picture"));
+                assert_eq!(s.project, before);
+            }
+            continue;
+        }
         s.execute("effects.apply", json!({"clips": [clip], "effect": d.id})).unwrap_or_else(|e| panic!("{}: {e}", d.id));
         let it = s.active_sequence().unwrap().find_item(filmcraft_project::ClipId(clip)).unwrap().1.clone();
         let inst = it.effects.iter().find(|e| e.effect == d.id).unwrap_or_else(|| panic!("{} not on the clip", d.id));

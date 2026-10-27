@@ -357,7 +357,7 @@ fn app_creator(launch: Launch, graphics: graphics::GraphicsStart, created: Arc<A
         }));
         app.hooks.pick_open_project = Some(Box::new(|| {
             rfd::FileDialog::new()
-                .add_filter(filmcraft_ui_egui::i18n::t("Smotri Project"), &file_filters::extensions(&["fcproj"]))
+                .add_filter(filmcraft_ui_egui::i18n::t("Smotri Project"), &file_filters::extensions(&["fcproj", "openscreen"]))
                 .pick_file()
                 .map(|p| p.to_string_lossy().to_string())
         }));
@@ -567,7 +567,7 @@ fn prepare_dialog(dialog: filmcraft_ui_egui::native_dialogs::FileDialog) -> film
 /// The project dialogs' filter patterns (`EDIT.FCPROJ` included).
 #[cfg(target_os = "linux")]
 fn project_patterns() -> Vec<String> {
-    file_filters::extensions(&["fcproj"])
+    file_filters::extensions(&["fcproj", "openscreen"])
 }
 
 #[cfg(test)]

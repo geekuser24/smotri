@@ -652,6 +652,7 @@ pub(super) fn defs() -> Vec<EffectDef> {
             ],
         ),
         super::shaker::definition(),
+        super::openscreen_zoom::definition(),
         video(
             "camera_shake",
             "Camera Shake",
@@ -1265,7 +1266,7 @@ mod tests {
         // Shaker is a Smotri addition to the upstream catalogue.
         for d in effect_defs().iter().filter(|d| d.kind == EffectKind::Video && d.category.first() == Some(&"Video Effects")) {
             let f = d.category[1];
-            if f == "Obsolete" || d.id == "shaker" {
+            if f == "Obsolete" || matches!(d.id, "shaker" | "openscreen_zoom") {
                 continue;
             }
             let listed = CATALOGUE.iter().any(|(cf, names)| *cf == f && names.contains(&d.name));

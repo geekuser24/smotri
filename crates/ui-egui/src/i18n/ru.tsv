@@ -3826,3 +3826,16 @@
 
 	Copy Effect	Копировать эффект
 	Paste Effect	Вставить эффект
+
+	OpenScreen Zoom…	Приближение OpenScreen…
+	OpenScreen Zoom	Приближение OpenScreen
+	Follow recorded cursor	Следовать за записанным курсором
+	Adds a zoom to desktop and cursor keys. Camera remains unchanged. Undo removes this zoom.	Добавляет зум ключами рабочего стола и курсора. Камера не меняется. Отмена убирает этот зум.
+
+	Zoom Active	Приближение включено
+	Zoom Scale	Масштаб приближения
+	Zoom In Duration	Длительность входа
+	Zoom Out Duration	Длительность выхода
+	Add an enabled key to zoom in and a disabled key to zoom out. Move the keys to change timing.	Поставьте ключ с галочкой для приближения и ключ без галочки для отдаления. Перемещайте ключи, чтобы менять время.
+
+	Import Project…	Импортировать проект…

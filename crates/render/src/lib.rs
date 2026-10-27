@@ -26,6 +26,7 @@ pub mod mask;
 pub mod mixer;
 pub mod multicam;
 pub mod offline;
+mod openscreen_zoom;
 pub mod plan;
 pub mod preview;
 pub mod remix;
@@ -171,6 +172,18 @@ impl Layer {
 /// Render a sequence, or only its video track `only` (a multi-camera angle; drawn even when the
 /// track's output is off).
 pub(crate) fn render_seq_tracks(project: &Project, seq: &Sequence, t: Tick, opts: RenderOptions, sources: &dyn SourceProvider, only: Option<usize>) -> Image {
+    render_seq_tracks_zoom(project, seq, t, opts, sources, only, None)
+}
+
+fn render_seq_tracks_zoom(
+    project: &Project,
+    seq: &Sequence,
+    t: Tick,
+    opts: RenderOptions,
+    sources: &dyn SourceProvider,
+    only: Option<usize>,
+    zoom: Option<Affine>,
+) -> Image {
     let (w, h) = output_size(seq, opts.scale);
     let mut canvas = Canvas::new(w, h);
     if opts.depth > MAX_NEST_DEPTH {
@@ -195,7 +208,10 @@ pub(crate) fn render_seq_tracks(project: &Project, seq: &Sequence, t: Tick, opts
                 if is_adjustment(project, i) {
                     return opts.effects.then(|| adjustment_layer(project, seq, i, t, opts, &tc, below));
                 }
-                item_layer(project, seq, i, t, opts, sources, &tc).map(|(img, op, bl)| (with_opacity(img, op), bl))
+                item_layer(project, seq, i, t, opts, sources, &tc).map(|(img, op, bl)| {
+                    let img = if let Some(m) = zoom.filter(|_| openscreen_zoom::applies(&track.name)) { img.transformed(w, h, &m) } else { img };
+                    (with_opacity(img, op), bl)
+                })
             };
             let below = canvas.snapshot();
             let la = a.and_then(|i| layer(i, &below));
@@ -236,6 +252,13 @@ pub(crate) fn render_seq_tracks(project: &Project, seq: &Sequence, t: Tick, opts
                 let mut out = below;
                 blend::composite(&mut out, &adj, 1.0, bl);
                 canvas.set(out);
+            }
+            continue;
+        }
+        if let Some(m) = zoom.filter(|_| openscreen_zoom::applies(&track.name)) {
+            if let Some((image, opacity, bl)) = item_layer(project, seq, item, t, opts, sources, &tc) {
+                let image = image.transformed(w, h, &m);
+                blend::composite(canvas.get(), &image, opacity, bl);
             }
             continue;
         }
@@ -616,6 +639,12 @@ pub(crate) fn base_layer(
         }
         ItemKind::Sequence(nested) => {
             let sub = RenderOptions { scale: want, effects: opts.effects, depth: opts.depth + 1, captions: false, working_output: true };
+            let zoom = opts
+                .effects
+                .then(|| item.effects.iter().find(|e| e.effect == "openscreen_zoom" && e.enabled))
+                .flatten()
+                .filter(|_| pi.metadata.get("smotri.openscreen.layout").is_some_and(|v| v == "picture-in-picture"))
+                .and_then(|e| openscreen_zoom::matrix(e, nested, ft, mt, want));
             match item.multicam_angle(nested) {
                 // a multi-camera clip shows its angle's track only (nothing for an audio-only angle)
                 Some(angle) => match nested.angle_video_track_index(angle) {
@@ -627,7 +656,7 @@ pub(crate) fn base_layer(
                 },
                 // A nested sequence shows its captions wherever it is nested, as part of its
                 // picture (Premiere does the same), whether or not the outer sequence shows its own.
-                None => render_seq(project, nested, ft, RenderOptions { captions: show_nested_captions(item), ..sub }, sources),
+                None => render_seq_tracks_zoom(project, nested, ft, RenderOptions { captions: show_nested_captions(item), ..sub }, sources, None, zoom),
             }
         }
         ItemKind::AdjustmentLayer { .. } => return None,

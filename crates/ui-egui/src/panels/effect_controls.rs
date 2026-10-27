@@ -594,7 +594,11 @@ pub(crate) fn param_row(
     x += 14.0;
     let vx = r.min.x + (r.width() * 0.5).max(150.0);
     row_label(ui, pos2(x, r.center().y), crate::i18n::t(pd.label), vx - 6.0 - x, Tokens::ui(12.0), t.text);
-    let value = param.value_at(mt);
+    let value = if e.effect == "openscreen_zoom" && pd.id == "active" && param.keyframes.first().is_some_and(|k| mt < k.time) {
+        ParamValue::Bool(false)
+    } else {
+        param.value_at(mt)
+    };
     let mut vui = ui.new_child(
         egui::UiBuilder::new()
             .max_rect(Rect::from_min_max(pos2(vx, r.min.y + 1.0), pos2(r.max.x - 26.0, r.max.y - 1.0)))
@@ -626,7 +630,14 @@ pub(crate) fn param_row(
         (ParamKind::Bool, ParamValue::Bool(b)) => {
             let mut v = *b;
             fit_to_row(&mut vui);
-            if vui.checkbox(&mut v, "").changed() {
+            let r = vui.checkbox(&mut v, "");
+            app.auto.add(&format!("effectControls.{}.{}.value", e.effect, pkey), r.rect, pd.label);
+            let r = if e.effect == "openscreen_zoom" && pd.id == "active" {
+                r.on_hover_text(tl!("Add an enabled key to zoom in and a disabled key to zoom out. Move the keys to change timing."))
+            } else {
+                r
+            };
+            if r.changed() {
                 set = Some(json!(v));
             }
         }

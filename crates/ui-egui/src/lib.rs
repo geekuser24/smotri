@@ -1392,12 +1392,25 @@ impl FilmcraftApp {
 
     pub fn file_dialog(&mut self, id: &str, params: &Value) -> Result<Value, String> {
         match id {
+            "file.importProject" => {
+                let bin = params.get("bin").cloned().unwrap_or_else(|| json!(self.import_bin().0));
+                self.pick(FileDialog::open_files(&["fcproj"]), move |app, paths| {
+                    if paths.is_empty() {
+                        return Ok(Value::Null);
+                    }
+                    let r = app.session.execute("file.import", json!({"paths":paths,"bin":bin})).map_err(|e| e.to_string());
+                    if let Err(e) = &r {
+                        app.ui.status = e.clone();
+                    }
+                    r
+                })
+            }
             "file.import" => {
                 let exts: Vec<&str> = filmcraft_media::VIDEO_EXTENSIONS
                     .iter()
                     .chain(filmcraft_media::AUDIO_EXTENSIONS)
                     .chain(filmcraft_media::STILL_EXTENSIONS)
-                    .chain(&["srt", "vtt", "scc", "edl", "xml", "fcpxml", "otio", "aaf", "omf"])
+                    .chain(&["srt", "vtt", "scc", "edl", "xml", "fcpxml", "otio", "aaf", "omf", "openscreen", "fcproj"])
                     .copied()
                     .collect();
                 let bin = params.get("bin").cloned();

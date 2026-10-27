@@ -1243,3 +1243,28 @@ fn dragging_clips_onto_new_item_makes_a_matching_sequence() {
     assert_eq!(sequences(&mut d), n0 + 2);
     assert_eq!(clips(&mut d), 2, "the whole selection is placed");
 }
+
+#[test]
+fn native_project_import_dialog_adds_a_bin_without_replacing_the_timeline() {
+    let dir = media_dir("native-project-import");
+    let path = dir.join("source.fcproj").to_string_lossy().into_owned();
+    let mut d = Driver::demo();
+    d.exec("file.saveAs", json!({"path":path}));
+    let before = d.harness.state().session.project.items.len();
+    let active = d.harness.state().session.state.active_sequence;
+    d.harness.state_mut().hooks.pick_files = Some(Box::new(move |exts| {
+        assert!(exts.contains(&"fcproj"));
+        vec![path.clone()]
+    }));
+    let r = d.harness.state_mut().file_dialog("file.importProject", &json!({})).unwrap();
+    assert!(r["errors"].as_array().unwrap().is_empty());
+    assert_eq!(d.harness.state().session.project.items.len(), before * 2);
+    assert_eq!(d.harness.state().session.state.active_sequence, active);
+    let bin = r["documents"][0]["bin"].as_u64().unwrap();
+    assert!(d.harness.state().session.project.root.find_bin(filmcraft_project::BinId(bin)).is_some());
+    d.frames(3);
+    d.snapshot("native-project-import", None);
+    d.harness.state_mut().hooks.pick_files = Some(Box::new(|_| vec![]));
+    assert_eq!(d.harness.state_mut().file_dialog("file.importProject", &json!({})).unwrap(), Value::Null);
+    std::fs::remove_dir_all(dir).unwrap();
+}

@@ -764,3 +764,46 @@ fn graphs_panel_apply_drag_save_and_context_menu() {
     assert_eq!(d.harness.state().session.prefs.easing_presets[0].name, "My UI Curve");
     d.shot("graphs-panel");
 }
+
+#[test]
+fn openscreen_zoom_has_visible_editable_boolean_keys() {
+    let (mut d, clip) = Driver::demo();
+    d.harness
+        .state_mut()
+        .session
+        .edit_sequence("Test zoom controls", |q, _, _| {
+            let c = q.all_tracks_mut().flat_map(|t| &mut t.items).find(|c| c.id.0 == clip.id).unwrap();
+            c.effects.insert(0, filmcraft_project::find_effect("openscreen_zoom").unwrap().instance());
+            Ok(())
+        })
+        .unwrap();
+    d.frames(3);
+    for effect in ["motion", "opacity", "time_remap"] {
+        let id = format!("effectControls.effect.{effect}.twirl");
+        if d.find(&id).is_some() {
+            d.click(&id);
+        }
+    }
+    d.rect("effectControls.effect.openscreen_zoom");
+    let t0 = d.seek(0.5);
+    d.click("effectControls.openscreen_zoom.active.stopwatch");
+    assert_eq!(d.parameter(&clip, "openscreen_zoom", "active").keyframes.len(), 1, "stopwatch should enable boolean animation");
+    d.click("effectControls.openscreen_zoom.active.value");
+    let p = d.parameter(&clip, "openscreen_zoom", "active");
+    assert_eq!(p.keyframes.len(), 1);
+    assert_eq!(p.keyframes[0].value, filmcraft_project::ParamValue::Bool(true));
+    let t1 = d.seek(2.5);
+    d.click("effectControls.openscreen_zoom.active.value");
+    let p = d.parameter(&clip, "openscreen_zoom", "active");
+    assert_eq!(p.keyframes.len(), 2);
+    assert_eq!(p.keyframes[1].value, filmcraft_project::ParamValue::Bool(false));
+    d.click("effectControls.openscreen_zoom.active.prevKeyframe");
+    assert_eq!(d.playhead(), t0);
+    d.click("effectControls.openscreen_zoom.active.nextKeyframe");
+    assert_eq!(d.playhead(), t1);
+    d.click("effectControls.openscreen_zoom.active.addKeyframe");
+    assert_eq!(d.parameter(&clip, "openscreen_zoom", "active").keyframes.len(), 1);
+    d.exec("edit.undo", json!({}));
+    assert_eq!(d.parameter(&clip, "openscreen_zoom", "active").keyframes.len(), 2);
+    d.shot("openscreen-zoom-controls");
+}

@@ -246,13 +246,68 @@ fn vp9_config(private: &[u8], v: Option<&filmcraft_matroska::VideoInfo>) -> VpcC
     c
 }
 
+/// Chromium MediaRecorder can put Annex-B parameter sets in CodecPrivate instead of avcC.
+/// Normalize that container representation; decoding still uses the usual AVC factories.
+/// H.264 Annex B start codes and ISO/IEC 14496-15 AVCDecoderConfigurationRecord.
+fn annexb_start(bytes: &[u8]) -> bool {
+    bytes.starts_with(&[0, 0, 1]) || bytes.starts_with(&[0, 0, 0, 1])
+}
+fn avc_config(bytes: &[u8]) -> Option<AvcConfig> {
+    if !annexb_start(bytes) {
+        return AvcConfig::parse(bytes).ok();
+    }
+    if bytes.len() > 256 * 1024 {
+        return None;
+    }
+    let nals = filmcraft_bitstream::annexb_nals(bytes);
+    let sps: Vec<_> = nals.iter().filter(|n| n.first().is_some_and(|b| b & 31 == 7)).collect();
+    let pps: Vec<_> = nals.iter().filter(|n| n.first().is_some_and(|b| b & 31 == 8)).collect();
+    if sps.is_empty() || sps.len() > 31 || pps.is_empty() || pps.len() > 255 {
+        return None;
+    }
+    let header = sps.first()?.get(1..4)?;
+    let mut avcc = vec![1, header[0], header[1], header[2], 0xff, 0xe0 | sps.len() as u8];
+    for n in &sps {
+        avcc.extend_from_slice(&u16::try_from(n.len()).ok()?.to_be_bytes());
+        avcc.extend_from_slice(n);
+    }
+    avcc.push(pps.len() as u8);
+    for n in &pps {
+        avcc.extend_from_slice(&u16::try_from(n.len()).ok()?.to_be_bytes());
+        avcc.extend_from_slice(n);
+    }
+    AvcConfig::parse(&avcc).ok()
+}
+fn avc_packet(bytes: Vec<u8>) -> crate::Result<Vec<u8>> {
+    if !annexb_start(&bytes) {
+        return Ok(bytes);
+    }
+    if bytes.len() > 64 * 1024 * 1024 {
+        return Err(CodecError::Decode("AVC packet exceeds 64 MiB".into()));
+    }
+    let nals = filmcraft_bitstream::annexb_nals(&bytes);
+    let mut packet = Vec::with_capacity(bytes.len());
+    for n in nals {
+        if n.is_empty() {
+            continue;
+        }
+        let len = u32::try_from(n.len()).map_err(|_| CodecError::Decode("AVC NAL exceeds size limit".into()))?;
+        packet.extend_from_slice(&len.to_be_bytes());
+        packet.extend_from_slice(n);
+    }
+    if packet.is_empty() {
+        return Err(CodecError::Decode("empty Annex-B AVC packet".into()));
+    }
+    Ok(packet)
+}
+
 fn sample_entry(c: &Codec, private: &[u8], v: Option<&filmcraft_matroska::VideoInfo>, w: u16, h: u16) -> Option<SampleEntry> {
     Some(match c {
         Codec::Vp8 => SampleEntry::video(FourCc(*b"vp08"), CodecConfig::Unknown { fourcc: FourCc(*b"vp08"), raw: Vec::new() }, w, h),
         Codec::Vp9 { private } => SampleEntry::video(FourCc(*b"vp09"), CodecConfig::Vp9(vp9_config(private, v)), w, h),
         Codec::Av1 { av1c } => SampleEntry::video(FourCc(*b"av01"), CodecConfig::Av1(filmcraft_isobmff::Av1Config::parse(av1c).unwrap_or_default()), w, h),
         Codec::Apv { apvc } => SampleEntry::apv(filmcraft_isobmff::ApvConfig::parse(apvc).unwrap_or_default(), w, h),
-        Codec::Avc { avcc } => SampleEntry::avc(AvcConfig::parse(avcc).ok()?, w, h),
+        Codec::Avc { avcc } => SampleEntry::avc(avc_config(avcc)?, w, h),
         Codec::Hevc { hvcc } => SampleEntry::hevc(HevcConfig::parse(hvcc).ok()?, w, h),
         Codec::ProRes { fourcc } => SampleEntry::prores(FourCc(fourcc.unwrap_or(*b"apcn")), w, h),
         Codec::Mjpeg => SampleEntry::jpeg(w, h),
@@ -366,6 +421,19 @@ impl MkvSource {
         };
         let mut explicit_color = None;
         let mut ventry = None;
+        // MediaRecorder can omit CodecPrivate and put SPS/PPS in its first Annex-B packet.
+        // Bound the packet read and header search; do not mistake arbitrary data for avcC.
+        let inline_avc = if let Some(i) = vtrack.filter(|&i| {
+            file.tracks
+                .get(i)
+                .is_some_and(|t| matches!(&t.codec, Codec::Avc { avcc } if avcc.is_empty()) && t.samples.first().is_some_and(|s| s.size <= 64 * 1024 * 1024))
+        }) {
+            let packet = file.read_sample(&bytes, i, 0).map_err(|e| CodecError::Container(e.to_string()))?;
+            let header = packet.get(..packet.len().min(256 * 1024)).unwrap_or_default();
+            if annexb_start(header) { avc_config(header) } else { None }
+        } else {
+            None
+        };
         // display rotation from the track's Projection (portrait phone video is stored landscape)
         let rotation = vtrack.and_then(|i| file.tracks[i].video.as_ref()).and_then(|v| v.display_rotation()).unwrap_or(0);
         let video = vtrack.map(|i| {
@@ -387,6 +455,9 @@ impl MkvSource {
                 }
             };
             ventry = sample_entry(&t.codec, &t.codec_private, t.video.as_ref(), w as u16, h as u16);
+            if ventry.is_none() {
+                ventry = inline_avc.clone().map(|c| SampleEntry::avc(c, w as u16, h as u16));
+            }
             let (color, explicit) = color_of(&v, w, h, ventry.as_ref().and_then(|e| crate::stream_color::from_codec_config(&e.codec)));
             if explicit {
                 explicit_color = Some(color);
@@ -589,7 +660,12 @@ impl VideoSamples for MkvVideo<'_> {
         Some(k)
     }
     fn read(&self, i: usize) -> crate::Result<Vec<u8>> {
-        self.src.read(self.track, i)
+        let bytes = self.src.read(self.track, i)?;
+        if self.src.file.tracks.get(self.track).is_some_and(|t| matches!(&t.codec,Codec::Avc{avcc} if avcc.is_empty() || annexb_start(avcc))) {
+            avc_packet(bytes)
+        } else {
+            Ok(bytes)
+        }
     }
     fn make_decoder(&self) -> crate::Result<Box<dyn VideoDecoder>> {
         let Some(e) = &self.src.ventry else {
@@ -760,5 +836,74 @@ mod origin_tests {
         let sound = src.audio(0, 48_000 * 2 / 5, 48_000).unwrap();
         assert!(sound.channels[0][9_590].abs() < 0.001, "silent before the delay");
         assert!((sound.channels[0][9_610] - 0.5).abs() < 0.001, "sound 0.2 s after the first picture");
+    }
+}
+
+#[cfg(test)]
+mod annexb_tests {
+    #[test]
+    fn media_recorder_annexb_camera_decodes_a_real_frame() {
+        use filmcraft_media::MediaSource;
+        let ff = filmcraft_testkit::require_ffmpeg!();
+        let out = std::process::Command::new(ff)
+            .args([
+                "-v",
+                "error",
+                "-f",
+                "lavfi",
+                "-i",
+                "color=c=red:s=32x32:r=25",
+                "-frames:v",
+                "1",
+                "-c:v",
+                "libx264",
+                "-profile:v",
+                "baseline",
+                "-f",
+                "h264",
+                "pipe:1",
+            ])
+            .output()
+            .unwrap();
+        assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+        let raw = out.stdout;
+        let mut private = Vec::new();
+        for n in filmcraft_bitstream::annexb_nals(&raw) {
+            if matches!(n.first().map(|b| b & 31), Some(7 | 8)) {
+                private.extend_from_slice(&[0, 0, 1]);
+                private.extend_from_slice(n);
+            }
+        }
+        for private in [private, Vec::new()] {
+            let mut track = filmcraft_matroska::TrackSpec::new(filmcraft_matroska::TrackKind::Video, "V_MPEG4/ISO/AVC");
+            track.video_size = Some((32, 32));
+            track.default_duration_ns = Some(40_000_000);
+            track.codec_private = private;
+            let mut writer = filmcraft_matroska::MkvWriter::new(std::io::Cursor::new(Vec::new()), vec![track], Default::default()).unwrap();
+            writer.write_frame(0, 0, true, &raw, None).unwrap();
+            let src = super::MkvSource::open("camera.webm", writer.finish().unwrap().into_inner().into()).unwrap();
+            let frame = src.video_frame(filmcraft_media::FrameRequest::full(filmcraft_time::Tick::ZERO)).unwrap();
+            let rgba = frame.to_rgba8();
+            let px = &rgba[(16 * 32 + 16) * 4..][..3];
+            assert!(px[0] > 230 && px[1] < 30 && px[2] < 30, "{px:?}");
+        }
+    }
+    #[test]
+    fn media_recorder_parameter_sets_and_packets_are_normalized() {
+        // Synthetic baseline SPS/PPS headers: no recorded artwork/media in this fixture.
+        let private = [0, 0, 1, 0x67, 66, 0, 30, 0x80, 0, 0, 0, 1, 0x68, 0xce, 0x80];
+        let c = super::avc_config(&private).expect("Annex B private accepted");
+        assert_eq!(c.profile, 66);
+        assert_eq!(c.sps.len(), 1);
+        assert_eq!(c.pps.len(), 1);
+        let bytes = vec![0, 0, 1, 0x65, 0x88, 0, 0, 0, 1, 0x06, 0x80];
+        assert_eq!(super::avc_packet(bytes).unwrap(), [0, 0, 0, 2, 0x65, 0x88, 0, 0, 0, 2, 0x06, 0x80]);
+        let regular = vec![0, 0, 0, 2, 0x65, 0x88];
+        assert_eq!(super::avc_packet(regular.clone()).unwrap(), regular);
+        for i in 0..private.len() {
+            assert!(std::panic::catch_unwind(|| super::avc_config(&private[..i])).is_ok());
+        }
+        assert!(super::avc_config(&[0, 0, 1, 0x67]).is_none());
+        assert!(super::avc_packet(vec![0, 0, 1]).is_err());
     }
 }

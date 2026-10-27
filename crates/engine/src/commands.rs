@@ -1357,6 +1357,10 @@ fn build() -> Vec<CommandSpec> {
                 Ok(json!({"items": ids.iter().map(|i| i.0).collect::<Vec<_>>()}))
             }
         ),
+        cmd!("file.importProject", "Import Project…", ["File"], None, r#"{"path":str,"bin":binId?}"#, always, |s, p| {
+            let path = str_p(p, "path").ok_or_else(|| bad("file.importProject", "need `path`"))?;
+            crate::project_import::import(s, path, u64_p(p, "bin").map(filmcraft_project::BinId))
+        }),
         cmd!("file.import", "Import…", ["File"], Some("Cmd+I"), r#"{"paths":[str],"bin":binId?,"imageSequence":bool?,"replace":bool?}"#, always, |s, p| {
             let bin = u64_p(p, "bin").map(filmcraft_project::BinId);
             let paths: Vec<String> = match p.get("paths").and_then(Value::as_array) {
@@ -1385,6 +1389,26 @@ fn build() -> Vec<CommandSpec> {
                         Ok((id, frames, missing)) => {
                             ids.push(id.0);
                             image_sequences.push(json!({"item": id.0, "frames": frames, "missing": missing}));
+                        }
+                        Err(e) => errors.push(format!("{path}: {e}")),
+                    }
+                    continue;
+                }
+                if crate::project_import::is_project(&path) {
+                    match crate::project_import::import(s, &path, bin) {
+                        Ok(r) => {
+                            sequences.extend(r["sequences"].as_array().cloned().unwrap_or_default());
+                            reports.push(r);
+                        }
+                        Err(e) => errors.push(format!("{path}: {e}")),
+                    }
+                    continue;
+                }
+                if crate::openscreen::is_project(&path) {
+                    match crate::openscreen::import(s, &path) {
+                        Ok(r) => {
+                            sequences.extend(r["sequences"].as_array().cloned().unwrap_or_default());
+                            reports.push(r);
                         }
                         Err(e) => errors.push(format!("{path}: {e}")),
                     }
@@ -1540,9 +1564,18 @@ fn build() -> Vec<CommandSpec> {
             }
             Ok(r)
         }),
+        cmd!(
+            "openscreen.addZoom",
+            "OpenScreen Zoom Keys",
+            [],
+            None,
+            r#"{"start":seconds?,"duration":seconds,"scale":percent,"follow":bool}"#,
+            has_seq,
+            crate::openscreen::add_zoom
+        ),
         cmd!("file.open", "Open Project…", ["File"], Some("Cmd+O"), r#"{"path":str}"#, always, |s, p| {
             let path = str_p(p, "path").ok_or_else(|| bad("file.open", "need `path`"))?.to_string();
-            open_project(s, &path)
+            if crate::openscreen::is_project(&path) { crate::openscreen::import(s, &path) } else { open_project(s, &path) }
         }),
         cmd!("file.recover", "Recover Unsaved Changes…", ["File"], None, r#"{"id":str?}"#, has_recovery, |s, p| recover(s, str_p(p, "id"))),
         cmd!("file.discardRecovery", "Discard Unsaved Changes", [], None, r#"{"id":str?,"all":bool?}"#, has_recovery, |s, p| {
@@ -3043,6 +3076,17 @@ fn build() -> Vec<CommandSpec> {
             let clips = clips_p(s, p);
             if clips.is_empty() {
                 return Err(bad("effects.apply", "select clips first"));
+            }
+            if def.id == "openscreen_zoom" {
+                for id in &clips {
+                    let c = s.active_sequence().and_then(|q| q.find_item(*id)).map(|(_, c)| c).ok_or_else(|| bad("effects.apply", "missing clip"))?;
+                    if !s.project.item(c.item).and_then(|i| i.metadata.get("smotri.openscreen.layout")).is_some_and(|v| v == "picture-in-picture") {
+                        return Err(bad("effects.apply", "OpenScreen Zoom needs a Picture in picture composition clip"));
+                    }
+                    if c.effects.iter().any(|e| e.effect == "openscreen_zoom") {
+                        return Err(bad("effects.apply", "OpenScreen Zoom is already in Effect Controls"));
+                    }
+                }
             }
             let is_audio = def.kind == filmcraft_project::EffectKind::Audio;
             // Audio effects belong on audio clips. A video clip in an A/V pair is retargeted to

@@ -62,7 +62,7 @@ def main():
         cli_helper = stage / 'filmcraft-audio-plugin-host'
         shutil.copy2(helper, cli_helper)
         helpers.append(cli_helper)
-    for name in ('LICENSE-MIT', 'LICENSE-APACHE', 'NOTICE', 'THIRD-PARTY-AUDIO-PLUGINS.txt', 'CHANGELOG-SMOTRI.md'):
+    for name in ('LICENSE-MIT', 'LICENSE-APACHE', 'NOTICE', 'THIRD-PARTY-AUDIO-PLUGINS.txt', 'THIRD-PARTY-OPENSCREEN.txt', 'CHANGELOG-SMOTRI.md'):
         shutil.copy2(root / name, stage / name)
     manifest = {'version': args.version, 'commit': args.sha, 'target': args.target,
                 'channel': 'preview', 'downloader_bundled': False,

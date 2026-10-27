@@ -460,6 +460,8 @@ pub fn apply(img: &mut Image, e: &EffectInstance, cx: &FxCtx) -> bool {
         crate::effects::apply(img, &a, cx);
     };
     match e.effect.as_str() {
+        // Applied while rendering the nested desktop/cursor layers, before camera compositing.
+        "openscreen_zoom" => {}
         // Adjust / Color / Image Control / Keying / Utility colour
         "lighting_effects" => color::lighting(img, e, cx),
         "logo_cutout" => color::logo_cutout(img, e, cx),

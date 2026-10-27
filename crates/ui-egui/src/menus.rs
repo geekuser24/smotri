@@ -667,7 +667,7 @@ pub(crate) fn invoke_command(app: &mut FilmcraftApp, ctx: &egui::Context, id: &s
         return Ok(Value::Null);
     }
     // File dialogs for commands that need a path.
-    if (id == "file.import" && params.get("paths").is_none() && params.get("path").is_none())
+    if (matches!(id, "file.import" | "file.importProject") && params.get("paths").is_none() && params.get("path").is_none())
         || (id == "file.importImageSequence" && params.get("path").is_none())
         || (id == "file.saveAs" && params.get("path").is_none())
         || (id == "file.saveCopy" && params.get("path").is_none())
