@@ -14,6 +14,9 @@ pub const FILMCRAFT_PANEL: &[Entry] = &[
     // the forward-delete key (Delete on Windows and Linux keyboards) clears timeline clips too;
     // application-wide it is Project ▸ Clear (#243)
     ("edit.clear", "Delete", "Timeline"),
+    // Option + the Mac delete key must beat plain Backspace (Clear). The audit does not
+    // adopt this alias because Ripple Delete already has an app-wide Shift+Delete binding.
+    ("edit.rippleDelete", "Alt+Backspace", "Timeline"),
     ("file.newBin", "Cmd+B", "Project"),
     ("edit.undo", "Left", "History"),
     ("edit.redo", "Right", "History"),

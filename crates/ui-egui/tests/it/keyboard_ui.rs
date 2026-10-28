@@ -290,6 +290,56 @@ fn shift_delete_ripple_deletes_with_the_timeline_focused() {
 }
 
 #[test]
+fn option_backspace_ripple_deletes_selected_tracks_in_one_undo_step() {
+    let mut d = Driver::new();
+    d.exec("file.newSequence", json!({"name": "Ripple keyboard", "video": 2, "audio": 2}));
+    let rate = d.app().session.sequence_rate();
+    let item = d.app().session.project.items.values().find(|i| i.has_video() && i.has_audio() && i.as_media().is_some()).unwrap().id;
+    for track in 1..=2 {
+        for n in 0..4 {
+            d.exec(
+                "timeline.place",
+                json!({"item": item.0, "track": format!("V{track}"), "audioTrack": format!("A{track}"),
+                "frame": n * 48, "sourceIn": rate.tick_of(48).0, "duration": rate.tick_of(48).0}),
+            );
+        }
+    }
+    // Select two adjacent intervals on independent video/audio pairs, as with a marquee.
+    d.exec("sequence.linkedSelection", json!({"on": false}));
+    let q = d.app().session.active_sequence().unwrap();
+    let tracks: Vec<_> = q.video_tracks.iter().chain(&q.audio_tracks).collect();
+    let selected: Vec<_> = tracks.iter().flat_map(|t| t.items[1..3].iter().map(|i| i.id.0)).collect();
+    let later: Vec<_> = tracks.iter().map(|t| t.items[3].id).collect();
+    d.exec("timeline.select", json!({"clips": selected}));
+    d.focus("Timeline");
+    let before = d.app().session.project.clone();
+    d.key("Alt+Backspace");
+    let q = d.app().session.active_sequence().unwrap();
+    q.check().unwrap();
+    for id in &selected {
+        assert!(q.find_item(filmcraft_project::ClipId(*id)).is_none(), "every selected clip is removed");
+    }
+    for id in &later {
+        assert_eq!(q.find_item(*id).unwrap().1.start, rate.tick_of(48), "all tracks close the two intervals exactly once");
+    }
+    let after = d.app().session.project.clone();
+    d.exec("edit.undo", json!({}));
+    assert_eq!(*d.app().session.project, *before, "one undo restores all removed and moved clips");
+    d.exec("edit.redo", json!({}));
+    assert_eq!(*d.app().session.project, *after);
+    d.exec("edit.undo", json!({}));
+    d.exec("timeline.select", json!({"clips": selected}));
+    d.key("Backspace");
+    let q = d.app().session.active_sequence().unwrap();
+    for id in &selected {
+        assert!(q.find_item(filmcraft_project::ClipId(*id)).is_none());
+    }
+    for id in &later {
+        assert_eq!(q.find_item(*id).unwrap().1.start, rate.tick_of(144), "plain Backspace still leaves a gap");
+    }
+}
+
+#[test]
 fn alt_click_isolates_already_selected_linked_clip_before_delete() {
     for audio in [false, true] {
         let mut d = Driver::new();
