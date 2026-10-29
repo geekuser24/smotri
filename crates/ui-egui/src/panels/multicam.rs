@@ -333,22 +333,21 @@ pub fn show_dialog(app: &mut FilmcraftApp, ctx: &egui::Context) {
 
 /// A revision for grid frames: changes when the multi-camera source (or its cameras' media)
 /// changes, not with every edit of the cut (cuts recorded live must not throw away the grid).
-fn grid_revision(app: &FilmcraftApp, src: ItemId) -> u64 {
-    use std::hash::{Hash, Hasher};
-    let mut h = std::collections::hash_map::DefaultHasher::new();
-    if let Some(q) = app.session.project.sequence(src) {
-        serde_json::to_vec(q).unwrap_or_default().hash(&mut h);
-        for t in &q.video_tracks {
-            for it in &t.items {
-                app.item_revision(it.item).hash(&mut h);
-            }
+fn grid_revision(app: &mut FilmcraftApp, src: ItemId) -> u64 {
+    match app.multicam_revisions.get(&app.session.project, src, app.session.media.use_proxies()) {
+        Ok(revision) => revision,
+        Err(error) => {
+            log::warn!("camera preview revision: {error}");
+            app.session.revision
         }
     }
-    h.finish()
 }
 
 /// The angle grid of the Multi-Camera view in `area`.
 pub fn grid(app: &mut FilmcraftApp, ui: &mut egui::Ui, area: Rect) {
+    if !ui.is_rect_visible(area) {
+        return;
+    }
     let t = app.tokens;
     let ctx = ui.ctx().clone();
     ui.painter().rect_filled(area, 0.0, t.panel_bg);

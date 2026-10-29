@@ -31,6 +31,8 @@ pub fn stats(app: &FilmcraftApp) -> Value {
     frames["renderCostMs"] = json!(app.frames.render_cost() * 1e3);
     frames["cache"] = json!({"images": images, "imageMB": image_bytes as f64 / 1e6, "plans": plans, "planMB": plan_bytes as f64 / 1e6});
     v["frames"] = frames;
+    let (queued, running) = app.frames.multicam_work();
+    v["frames"]["multicam"] = json!({"queuedJobs": queued, "runningJobs": running});
     v["gpu"] = app.gpu.as_ref().map_or(Value::Null, |g| {
         json!({
             "uploadedBytes": g.compositor.uploaded_bytes,

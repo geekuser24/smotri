@@ -8,7 +8,7 @@
 //! render (see `filmcraft_engine::previews`).
 
 use std::cell::Cell;
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
@@ -33,6 +33,18 @@ pub enum Target {
     MulticamGrid(ItemId, u8, u16),
     /// One angle of a multi-camera source (Edit Cameras thumbnails).
     MulticamAngle(ItemId, u32),
+}
+
+impl Target {
+    fn is_multicam(self) -> bool {
+        matches!(self, Self::MulticamGrid(..) | Self::MulticamAngle(..))
+    }
+}
+
+#[derive(Default)]
+struct MulticamDemand {
+    requested: HashSet<Target>,
+    allowed: HashSet<Target>,
 }
 
 /// Item jobs at this priority or a larger number are background work: thumbnails of the Project
@@ -96,6 +108,7 @@ struct Job {
 }
 
 struct Shared {
+    multicam: Mutex<MulticamDemand>,
     queue: Mutex<VecDeque<Job>>,
     cv: Condvar,
     done: Mutex<Cache>,
@@ -112,6 +125,24 @@ struct Shared {
     workers: usize,
     /// Always-on counters for `perf.stats`.
     stats: Mutex<FrameStats>,
+}
+
+impl Shared {
+    fn new(workers: usize) -> Self {
+        Self {
+            multicam: Mutex::new(MulticamDemand::default()),
+            queue: Mutex::new(VecDeque::new()),
+            cv: Condvar::new(),
+            done: Mutex::new(Cache { map: HashMap::new(), bytes: 0, budget: 768 << 20, clock: 0 }),
+            plans: Mutex::new(PlanCache::default()),
+            in_flight: Mutex::new(Vec::new()),
+            profiling: AtomicBool::new(false),
+            records: Mutex::new(Vec::new()),
+            render_cost: Mutex::new(0.0),
+            workers: workers.max(1),
+            stats: Mutex::new(FrameStats::default()),
+        }
+    }
 }
 
 /// Cumulative frame-job statistics (`perf.stats`): cheap enough to keep on all the time.
@@ -411,18 +442,7 @@ impl FrameServer {
     }
 
     pub fn new(pool: Arc<MediaPool>, services: Arc<dyn Services>, previews: Arc<PreviewStore>, workers: usize) -> Self {
-        let shared = Arc::new(Shared {
-            queue: Mutex::new(VecDeque::new()),
-            cv: Condvar::new(),
-            done: Mutex::new(Cache { map: HashMap::new(), bytes: 0, budget: 768 << 20, clock: 0 }),
-            plans: Mutex::new(PlanCache::default()),
-            in_flight: Mutex::new(Vec::new()),
-            profiling: AtomicBool::new(false),
-            records: Mutex::new(Vec::new()),
-            render_cost: Mutex::new(0.0),
-            workers: workers.max(1),
-            stats: Mutex::new(FrameStats::default()),
-        });
+        let shared = Arc::new(Shared::new(workers));
         let repaint: Arc<Mutex<Option<Box<dyn Fn() + Send + Sync>>>> = Arc::new(Mutex::new(None));
         #[cfg(not(target_arch = "wasm32"))]
         for i in 0..workers.max(1) {
@@ -449,6 +469,18 @@ impl FrameServer {
             let ctx = ctx.clone();
             *g = Some(Box::new(move || ctx.request_repaint()));
         }
+    }
+
+    /// Only camera previews actually drawn this UI pass may keep rendering. Cached frames
+    /// remain available when returning to the view; exports use a separate render pipeline.
+    pub fn begin_multicam_frame(&self) {
+        self.shared.multicam.lock().unwrap_or_else(|e| e.into_inner()).requested.clear();
+    }
+
+    pub fn finish_multicam_frame(&self) {
+        let mut demand = self.shared.multicam.lock().unwrap_or_else(|e| e.into_inner());
+        demand.allowed = demand.requested.clone();
+        self.retain_queue(|key| !key.target.is_multicam() || demand.allowed.contains(&key.target));
     }
 
     /// Collect a [`JobRecord`] per finished job (benchmarks); `take_records` drains them.
@@ -522,6 +554,11 @@ impl FrameServer {
     }
 
     fn request_job(&self, key: FrameKey, time: Tick, scale: f32, project: &Arc<Project>, prio: u32, prefetch: bool, catch_up: Option<Tick>) {
+        if key.target.is_multicam() {
+            let mut demand = self.shared.multicam.lock().unwrap_or_else(|e| e.into_inner());
+            demand.requested.insert(key.target);
+            demand.allowed.insert(key.target);
+        }
         let hit = || self.shared.stats.lock().unwrap_or_else(|e| e.into_inner()).request_hits += 1;
         if self.shared.done.lock().unwrap_or_else(|e| e.into_inner()).map.contains_key(&key)
             || self.shared.plans.lock().unwrap_or_else(|e| e.into_inner()).map.contains_key(&key)
@@ -638,6 +675,20 @@ impl FrameServer {
 
     pub fn queue_len(&self) -> usize {
         self.shared.queue.lock().unwrap_or_else(|e| e.into_inner()).len()
+    }
+
+    /// Camera preview work still wanted by the UI (cancelled workers are winding down).
+    pub fn multicam_work(&self) -> (usize, usize) {
+        let queued = self.shared.queue.lock().unwrap_or_else(|e| e.into_inner()).iter().filter(|j| j.key.target.is_multicam()).count();
+        let running = self
+            .shared
+            .in_flight
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .iter()
+            .filter(|(key, cancel, _)| key.target.is_multicam() && !cancel.load(Ordering::Relaxed))
+            .count();
+        (queued, running)
     }
 
     /// The most recent cached frame for `target` at or before `frame` within `max_back` frames.
@@ -811,7 +862,19 @@ pub fn inject_job_panics(n: u32) {
 static INJECT_PANICS: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 
 fn run_job(sh: &Shared, job: &Job, pool: &Arc<MediaPool>, services: &Arc<dyn Services>, previews: &PreviewStore) -> bool {
+    // Synchronize admission with visibility cancellation. A worker may have removed the
+    // job from the queue just before the view was hidden, but not registered it yet.
+    let demand = job.key.target.is_multicam().then(|| sh.multicam.lock().unwrap_or_else(|e| e.into_inner()));
+    if demand.as_ref().is_some_and(|d| !d.allowed.contains(&job.key.target)) {
+        job.cancel.store(true, Ordering::Relaxed);
+        let mut stats = sh.stats.lock().unwrap_or_else(|e| e.into_inner());
+        stats.jobs += 1;
+        stats.cancelled += 1;
+        stats.prefetch += job.prefetch as u64;
+        return true;
+    }
     sh.in_flight.lock().unwrap_or_else(|e| e.into_inner()).push((job.key, job.cancel.clone(), job.prefetch));
+    drop(demand);
     if INJECT_PANICS.load(Ordering::Relaxed) > 0 && INJECT_PANICS.fetch_sub(1, Ordering::Relaxed) > 0 {
         crate::crash::injected_fault("injected frame-job fault");
     }
@@ -977,6 +1040,47 @@ fn render_job(job: &Job, pool: &Arc<MediaPool>, services: &Arc<dyn Services>, pr
 mod tests {
     use super::{PlaybackMeter, Target, background_work, playback_plan};
     use filmcraft_project::ItemId;
+
+    #[test]
+    fn hidden_multicam_cancels_queued_running_and_not_yet_registered_jobs() {
+        use super::*;
+        let session = filmcraft_engine::Session::default();
+        // No worker threads: exercise each cancellation boundary deterministically.
+        let server = FrameServer {
+            shared: Arc::new(Shared::new(1)),
+            pool: session.media.clone(),
+            services: session.services.clone(),
+            previews: session.previews.clone(),
+            repaint: Arc::new(Mutex::new(None)),
+        };
+        let grid = FrameKey { target: Target::MulticamGrid(ItemId(1), 2, 0), frame: 0, size: 250, revision: 1, draft: false };
+        let thumb = FrameKey { target: Target::MulticamAngle(ItemId(1), 0), ..grid };
+        let program = FrameKey { target: Target::Sequence(ItemId(2)), ..grid };
+        server.begin_multicam_frame();
+        for key in [grid, thumb, program] {
+            server.request(key, Tick::ZERO, 0.25, &session.project, 0);
+        }
+        server.finish_multicam_frame();
+        assert_eq!(server.queue_len(), 3, "visible previews are retained");
+        let running = Arc::new(AtomicBool::new(false));
+        server.shared.in_flight.lock().unwrap().push((grid, running.clone(), true));
+        let cached = Arc::new(Rgba { w: 1, h: 1, px: vec![0; 4] });
+        server.shared.done.lock().unwrap().insert(grid, cached);
+        // A worker picked this up, but has not called run_job yet.
+        let picked = server.shared.queue.lock().unwrap().remove(1).unwrap();
+        server.begin_multicam_frame();
+        server.finish_multicam_frame();
+        assert!(running.load(Ordering::Relaxed), "running grid receives cancellation");
+        assert_eq!(server.shared.queue.lock().unwrap().front().unwrap().key, program);
+        assert_eq!(server.queue_len(), 1, "normal preview is not cancelled");
+        assert!(run_job(&server.shared, &picked, &server.pool, &server.services, &server.previews));
+        assert!(picked.cancel.load(Ordering::Relaxed), "late worker cannot start hidden work");
+        assert!(server.get(&grid).is_some(), "hiding keeps cached frames");
+        server.begin_multicam_frame();
+        server.request(grid, Tick::ZERO, 0.25, &session.project, 0);
+        server.finish_multicam_frame();
+        assert!(server.shared.multicam.lock().unwrap().allowed.contains(&grid.target), "cache hit counts as visible");
+    }
 
     #[test]
     fn only_item_thumbnails_are_background_work() {

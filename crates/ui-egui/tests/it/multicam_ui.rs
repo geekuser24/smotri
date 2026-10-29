@@ -426,3 +426,34 @@ fn create_multicam_from_clips_selected_in_the_timeline() {
     let src = d.app().session.state.project_selection[0];
     assert_eq!(d.app().session.project.sequence(src).unwrap().multicam.clone().unwrap().cameras.len(), 4);
 }
+
+#[test]
+fn hidden_or_unrelated_program_view_stops_requesting_camera_frames() {
+    use filmcraft_ui_egui::frames::Target;
+    let (s, _) = many_angle_session();
+    let mut d = Driver::new(s);
+    d.app().frames.set_profiling(true);
+    d.ok("ui.menu.invoke", json!({"id":"multicam.toggleView", "params":{"enabled":true}}));
+    d.until("visible grid", |d| d.app().frames.take_records().iter().any(|r| matches!(r.key.target, Target::MulticamGrid(..)) && !r.cancelled));
+    d.ok("ui.menu.invoke", json!({"id":"multicam.toggleView", "params":{"enabled":false}}));
+    // Allow already-running, cancellation-aware jobs to report their completion.
+    d.until("hidden work drained", |d| d.app().frames.queue_len() == 0);
+    d.frames(6);
+    d.app().frames.take_records();
+    for frame in [24, 36, 48] {
+        d.exec("playhead.set", json!({"frame":frame}));
+        d.frames(3);
+    }
+    let jobs = d.app().frames.take_records();
+    assert!(!jobs.iter().any(|r| matches!(r.key.target, Target::MulticamGrid(..) | Target::MulticamAngle(..))));
+    // Turning the view back on reuses the cache and can show another time normally.
+    d.ok("ui.menu.invoke", json!({"id":"multicam.toggleView", "params":{"enabled":true}}));
+    d.until("visible again", |d| d.app().frames.take_records().iter().any(|r| matches!(r.key.target, Target::MulticamGrid(..)) && !r.cancelled));
+    d.exec("file.newSequence", json!({"name":"Other sequence", "width":W, "height":H}));
+    d.until("old grid drained", |d| d.app().frames.queue_len() == 0);
+    d.frames(6);
+    d.app().frames.take_records();
+    d.exec("playhead.set", json!({"frame":24}));
+    d.frames(6);
+    assert!(!d.app().frames.take_records().iter().any(|r| matches!(r.key.target, Target::MulticamGrid(..) | Target::MulticamAngle(..))));
+}

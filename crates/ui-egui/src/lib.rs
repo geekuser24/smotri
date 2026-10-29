@@ -39,6 +39,7 @@ pub mod credits;
 pub mod dock;
 mod dock_shared;
 mod dock_ui;
+mod multicam_preview;
 /// Thumbnail textures kept before the least recently used are freed (each is up to 320 px wide).
 const MAX_THUMB_TEXTURES: usize = 512;
 
@@ -304,6 +305,7 @@ pub struct FilmcraftApp {
     pub ui: UiState,
     pub tokens: Tokens,
     pub frames: Arc<FrameServer>,
+    multicam_revisions: multicam_preview::Revisions,
     pub playback: Playback,
     pub source_playback: source_playback::SourcePlayback,
     pub audio: Option<Box<dyn AudioOut>>,
@@ -580,6 +582,7 @@ impl FilmcraftApp {
             ui: UiState { language, ..UiState::default() },
             tokens: Tokens::for_kind(ThemeKind::Dark),
             frames,
+            multicam_revisions: Default::default(),
             playback: Playback { speed: 1.0, ..Default::default() },
             source_playback: Default::default(),
             audio: None,
@@ -1900,6 +1903,7 @@ impl FilmcraftApp {
         }
         let ctx = ui.ctx().clone();
         self.auto.begin_frame();
+        self.frames.begin_multicam_frame();
         panels::metadata::follow_selection(self);
         self.frames.set_context(&ctx);
         self.session.poll_persistence();
@@ -1982,6 +1986,7 @@ impl FilmcraftApp {
         // the Timeline has had its chance to place a file drop this frame; anything left stays a bin import
         self.pending_timeline_drop = None;
         panels::dialogs::show(self, &ctx);
+        self.frames.finish_multicam_frame();
         if !self.ui.show_status_bar {
             // no bar to draw the job in, but a finished preview render still plays
             self.watch_jobs(ui.ctx());

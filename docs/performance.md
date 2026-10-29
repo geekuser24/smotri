@@ -4,6 +4,25 @@
 and `.md` (options and sections: [testing.md](testing.md) §5). Agents read live counters with
 `perf.stats` ([control-protocol.md](control-protocol.md)).
 
+## Multi-camera preview lifetime
+
+The camera grid and Edit Cameras thumbnails keep rendering only while requested by a visible
+panel. Hiding the grid, switching to another sequence, changing pages, or closing the dialog
+drops their queued jobs and signals cancellation to running jobs. A worker picked up just before
+the visibility change also checks admission before rendering. Cancellation is cooperative; an
+already-running decoder operation may finish before it observes the signal. Cached images stay
+available when the view returns. Program preview and exports are unaffected.
+
+Camera-grid revisions follow the source's reachable video sequences and media, including nested
+layouts, instead of the outer edit's global revision. Cuts and angle switches therefore preserve
+unchanged camera frames. Source edits, Undo, relinking and proxy changes still update the revision.
+Immutable sequence snapshots cache their content hashes, so large cursor/keyframe lists are not
+serialized again on every repaint or unrelated edit. Graph traversal is iterative and bounded.
+
+`perf.stats.frames.multicam` reports `queuedJobs` and `runningJobs` still wanted by the UI.
+Tests cover hidden queued/in-flight/admission work, restoring the view, changing sequences,
+nested-source cache invalidation and cyclic sources.
+
 ## Interactive builds and redraw work
 
 For interactive editing, build with `cargo build --release -p filmcraft --features whisper` and
