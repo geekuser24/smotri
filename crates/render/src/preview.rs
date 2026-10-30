@@ -44,7 +44,7 @@ use filmcraft_time::{FrameRate, Tick};
 use serde::Serialize;
 
 /// Bump when the hash layout or the preview format changes (invalidates every preview).
-pub const HASH_VERSION: &str = "filmcraft-preview-v1";
+pub const HASH_VERSION: &str = "filmcraft-preview-v2";
 
 /// Multiple of the frame duration a frame may take before a segment is marked red. Playback
 /// renders ahead on several worker threads (2–6), so a frame can take somewhat longer than its
@@ -146,6 +146,7 @@ pub fn video_segments(project: &Project, seq_id: ItemId) -> Vec<Segment> {
     cuts.sort_unstable();
     cuts.dedup();
     let mut out = Vec::new();
+    let mut sources = SourceHashes::default();
     for w in cuts.windows(2) {
         let (fa, fb) = (w[0], w[1]);
         if fb <= fa {
@@ -166,7 +167,7 @@ pub fn video_segments(project: &Project, seq_id: ItemId) -> Vec<Segment> {
             match l {
                 Layer::Item(ti, it) => {
                     h.json(&("item", ti));
-                    hash_item(&mut h, project, it, t, TrackKind::Video, 0);
+                    hash_item(&mut h, project, it, t, TrackKind::Video, 0, &mut sources);
                     absolute |= prints_time(it);
                     clips.push(it.id);
                 }
@@ -180,7 +181,7 @@ pub fn video_segments(project: &Project, seq_id: ItemId) -> Vec<Segment> {
                     for side in [a, b] {
                         match side {
                             Some(it) => {
-                                hash_item(&mut h, project, it, t, TrackKind::Video, 0);
+                                hash_item(&mut h, project, it, t, TrackKind::Video, 0, &mut sources);
                                 absolute |= prints_time(it);
                                 clips.push(it.id);
                             }
@@ -254,6 +255,7 @@ pub fn audio_segments(project: &Project, seq_id: ItemId) -> Vec<AudioSegment> {
     // submixes (routing, inserts, automation) affect every segment
     global.json(&seq.submix_tracks);
     let mut out = Vec::new();
+    let mut sources = SourceHashes::default();
     for w in cuts.windows(2) {
         let (a, b) = (w[0], w[1]);
         if b <= a {
@@ -277,7 +279,7 @@ pub fn audio_segments(project: &Project, seq_id: ItemId) -> Vec<AudioSegment> {
                 for side in [x.from, x.to] {
                     match side.and_then(|id| tr.item(id)).filter(|i| i.enabled) {
                         Some(it) => {
-                            hash_item(&mut h, project, it, t, TrackKind::Audio, 0);
+                            hash_item(&mut h, project, it, t, TrackKind::Audio, 0, &mut sources);
                             heard = true;
                         }
                         None => h.json(&"none"),
@@ -285,7 +287,7 @@ pub fn audio_segments(project: &Project, seq_id: ItemId) -> Vec<AudioSegment> {
                 }
             } else if let Some(it) = tr.item_at(t).filter(|i| i.enabled) {
                 h.json(&("item", ti));
-                hash_item(&mut h, project, it, t, TrackKind::Audio, 0);
+                hash_item(&mut h, project, it, t, TrackKind::Audio, 0, &mut sources);
                 heard = true;
             }
         }
@@ -302,7 +304,7 @@ fn prints_time(it: &TrackItem) -> bool {
 
 /// Hash a clip and its source as heard (`kind` Audio) or seen (`kind` Video): a nested sequence
 /// contributes only the tracks of that kind, so editing its picture keeps its sound's previews.
-fn hash_item(h: &mut Fnv128, project: &Project, it: &TrackItem, origin: Tick, kind: TrackKind, depth: u32) {
+fn hash_item(h: &mut Fnv128, project: &Project, it: &TrackItem, origin: Tick, kind: TrackKind, depth: u32, sources: &mut SourceHashes) {
     let mut c = it.clone();
     c.id = Default::default();
     c.start -= origin;
@@ -314,10 +316,30 @@ fn hash_item(h: &mut Fnv128, project: &Project, it: &TrackItem, origin: Tick, ki
         c.name.clear();
     }
     h.json(&c);
-    hash_source(h, project, it.item, kind, depth);
+    hash_source(h, project, it.item, kind, depth, sources);
 }
 
-fn hash_source(h: &mut Fnv128, project: &Project, id: ItemId, kind: TrackKind, depth: u32) {
+// Per snapshot, not global: edits to any dependency must invalidate its digest. Depth is
+// part of the key because malformed cyclic graphs stop at the same bounded depth as before.
+// Hundreds of cuts of one nest now serialize that nest once instead of once per cut.
+type SourceHashes = std::collections::BTreeMap<(ItemId, bool, u32), u128>;
+
+fn hash_source(h: &mut Fnv128, project: &Project, id: ItemId, kind: TrackKind, depth: u32, sources: &mut SourceHashes) {
+    let key = (id, kind == TrackKind::Audio, depth);
+    if let Some(digest) = sources.get(&key) {
+        h.json(digest);
+        return;
+    }
+    let mut source = Fnv128::new();
+    hash_source_content(&mut source, project, id, kind, depth, sources);
+    // Cap extra memory even for hostile projects. An uncached source still hashes correctly.
+    if sources.len() < 100_000 {
+        sources.insert(key, source.0);
+    }
+    h.json(&source.0);
+}
+
+fn hash_source_content(h: &mut Fnv128, project: &Project, id: ItemId, kind: TrackKind, depth: u32, sources: &mut SourceHashes) {
     let Some(pi) = project.item(id) else {
         h.json(&"missing");
         return;
@@ -340,7 +362,7 @@ fn hash_source(h: &mut Fnv128, project: &Project, id: ItemId, kind: TrackKind, d
         }
         ItemKind::Subclip { parent, range, .. } => {
             h.json(&("subclip", range));
-            hash_source(h, project, *parent, kind, depth + 1);
+            hash_source(h, project, *parent, kind, depth + 1, sources);
         }
         ItemKind::AdjustmentLayer { .. } => h.json(&("adjustment", &pi.kind)),
         ItemKind::Graphic { .. } => h.json(&("graphic", &pi.kind)),
@@ -352,7 +374,7 @@ fn hash_source(h: &mut Fnv128, project: &Project, id: ItemId, kind: TrackKind, d
                 for (ti, tr) in s.audio_tracks.iter().enumerate() {
                     h.json(&("track", ti, tr.muted, tr.solo, tr.volume_db, tr.pan, tr.channels, &tr.effects, &tr.mixer, tr.items.len()));
                     for it in &tr.items {
-                        hash_item(h, project, it, Tick::ZERO, kind, depth + 1);
+                        hash_item(h, project, it, Tick::ZERO, kind, depth + 1, sources);
                     }
                     for x in &tr.transitions {
                         let mut xc = x.clone();
@@ -367,7 +389,7 @@ fn hash_source(h: &mut Fnv128, project: &Project, id: ItemId, kind: TrackKind, d
             for (ti, tr) in s.video_tracks.iter().enumerate() {
                 h.json(&("track", ti, tr.enabled, tr.items.len()));
                 for it in &tr.items {
-                    hash_item(h, project, it, Tick::ZERO, kind, depth + 1);
+                    hash_item(h, project, it, Tick::ZERO, kind, depth + 1, sources);
                 }
                 for x in &tr.transitions {
                     let mut xc = x.clone();
@@ -559,5 +581,44 @@ impl std::io::Write for Fnv128 {
     }
     fn flush(&mut self) -> std::io::Result<()> {
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod source_memo_tests {
+    use super::*;
+    #[test]
+    fn repeated_nested_sources_reuse_digest_and_new_snapshots_invalidate_it() {
+        let mut p = Project::new("repeated nest");
+        let seq = p.new_sequence("camera", Default::default(), 1, 1, None);
+        let mut sources = SourceHashes::default();
+        let mut first = Fnv128::new();
+        hash_source(&mut first, &p, seq, TrackKind::Video, 0, &mut sources);
+        for _ in 0..200 {
+            let mut h = Fnv128::new();
+            hash_source(&mut h, &p, seq, TrackKind::Video, 0, &mut sources);
+            assert_eq!(h.0, first.0);
+            assert_eq!(sources.len(), 1);
+        }
+        p.sequence_mut(seq).unwrap().settings.width = 640;
+        let mut changed = Fnv128::new();
+        hash_source(&mut changed, &p, seq, TrackKind::Video, 0, &mut SourceHashes::default());
+        assert_ne!(changed.0, first.0);
+    }
+
+    #[test]
+    fn recursive_nests_and_missing_sources_are_bounded_with_memoization() {
+        let mut p = Project::new("cyclic input");
+        let seq = p.new_sequence("self", Default::default(), 1, 1, None);
+        let c = p
+            .make_track_item(seq, TrackKind::Video, Tick::ZERO, filmcraft_time::TimeRange::new(Tick::ZERO, Tick::from_units(1, 1)), FrameRate::FPS_25)
+            .unwrap();
+        p.sequence_mut(seq).unwrap().video_tracks[0].items.push(c);
+        let mut sources = SourceHashes::default();
+        let mut h = Fnv128::new();
+        hash_source(&mut h, &p, seq, TrackKind::Video, 0, &mut sources);
+        assert_eq!(sources.len(), 10);
+        hash_source(&mut h, &p, ItemId(u64::MAX), TrackKind::Audio, 0, &mut sources);
+        assert_eq!(sources.len(), 11);
     }
 }

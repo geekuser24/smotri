@@ -3,7 +3,7 @@ use crate::{
     EngineError, Result, Session,
     commands::{CommandSpec, has_seq},
 };
-use filmcraft_project::{ClipId, ItemId, ParamValue, Project, TrackId, Transcript, effect::find_effect};
+use filmcraft_project::{ClipId, ItemId, Project, TrackId, Transcript};
 use filmcraft_time::{Tick, TimeRange};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -464,23 +464,7 @@ fn apply(s: &mut Session, p: &Value) -> Result<Value> {
                 if !fi && !fo {
                     continue;
                 }
-                let fade = Tick::from_units(5, 1000).min(Tick(c.duration.0 / 2));
-                if fade <= Tick::ZERO {
-                    continue;
-                }
-                if let Some(mut e) = find_effect("volume_a").map(|d| d.instance())
-                    && let Some(v) = e.params.get_mut("level")
-                {
-                    v.put_keyframe(c.source_time_at(c.start), ParamValue::Float(if fi { -96. } else { 0. }));
-                    if fi {
-                        v.put_keyframe(c.source_time_at(c.start + fade), ParamValue::Float(0.));
-                    }
-                    if fo {
-                        v.put_keyframe(c.source_time_at(c.end() - fade), ParamValue::Float(0.));
-                    }
-                    v.put_keyframe(c.source_time_at(c.end()), ParamValue::Float(if fo { -96. } else { 0. }));
-                    c.effects.push(e);
-                }
+                filmcraft_project::cleanup_fades::add(c, fi, fo);
             }
         }
         Ok(())

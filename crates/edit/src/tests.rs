@@ -905,3 +905,23 @@ fn moving_an_edge_keeps_the_media_under_the_timeline() {
         }
     }
 }
+
+#[test]
+fn cleanup_fades_follow_trimmed_edges_without_changing_manual_volume() {
+    let mut fx = Fx::new();
+    let mut c = fx.item(48, 48, 48);
+    let manual = filmcraft_project::find_effect("volume_a").unwrap().instance();
+    c.effects.push(manual.clone());
+    filmcraft_project::cleanup_fades::add(&mut c, true, true);
+    let original = c.clone();
+    move_edge(&mut c, Edge::In, f(-24), true);
+    move_edge(&mut c, Edge::Out, f(24), true);
+    assert_eq!(c.effects[0], manual);
+    let e = c.effects.last().unwrap();
+    assert_eq!(e.f64_at("level", c.source_time_at(c.start + f(12))), 0.0);
+    assert_eq!(e.f64_at("level", c.source_time_at(c.end() - f(12))), 0.0);
+    assert_eq!(e.f64_at("level", c.source_time_at(c.start)), -96.0);
+    move_edge(&mut c, Edge::Out, f(-24), true);
+    move_edge(&mut c, Edge::In, f(24), true);
+    assert_eq!(c, original);
+}

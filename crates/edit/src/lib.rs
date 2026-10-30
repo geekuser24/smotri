@@ -718,6 +718,7 @@ pub fn move_edge(it: &mut TrackItem, edge: Edge, d: Tick, move_start: bool) {
             it.duration += d;
         }
     }
+    filmcraft_project::cleanup_fades::refresh(it);
 }
 
 /// Trim one edge of an item (Selection-tool edge drag = Regular; Ripple tool = Ripple).

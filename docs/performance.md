@@ -23,6 +23,18 @@ serialized again on every repaint or unrelated edit. Graph traversal is iterativ
 Tests cover hidden queued/in-flight/admission work, restoring the view, changing sequences,
 nested-source cache invalidation and cyclic sources.
 
+## Repeated nested clips after edits
+
+Render-bar video and audio segment hashes share a per-snapshot source-digest memo. A sequence
+cut into many clips no longer serializes the same nested cursor/effect keyframes for each segment.
+The memo key includes media kind and recursion depth; graph depth and memo size are bounded.
+A fresh snapshot starts a fresh memo, so edits inside a nest cannot leave stale preview hashes.
+Preview hash version v2 intentionally invalidates old disk previews once.
+
+The nested multicam audio mixer takes an audio-only snapshot (tracks, routing, inserts and master
+state). It does not clone video tracks, captions or cursor keyframes for every audio block.
+Camera audio selection and the shared audio-only sources keep the same routing.
+
 ## Interactive builds and redraw work
 
 For interactive editing, build with `cargo build --release -p filmcraft --features whisper` and

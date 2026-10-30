@@ -216,7 +216,7 @@ fn mix_item(
         // A multi-camera clip plays the audio of its source's audio setting: camera 1, all
         // cameras, or (when switching audio) the angle the clip selects.
         let q = if nested.multicam.is_some() {
-            std::borrow::Cow::Owned(nested.with_angle_audio(item.multicam_angle(nested)))
+            std::borrow::Cow::Owned(nested.audio_only_for_angle(item.multicam_angle(nested)))
         } else {
             std::borrow::Cow::Borrowed(nested)
         };

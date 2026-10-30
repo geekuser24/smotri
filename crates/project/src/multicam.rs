@@ -184,6 +184,37 @@ impl Sequence {
             None => (angle < self.video_tracks.len()).then_some(angle),
         }
     }
+    /// Audio-render snapshot: never copy video/cursor keyframes just to mix a sound block.
+    /// The full `with_angle_audio` remains available to callers that also need the picture.
+    pub fn audio_only_for_angle(&self, angle: Option<usize>) -> Sequence {
+        let mut q = Sequence {
+            settings: self.settings.clone(),
+            video_tracks: Vec::new(),
+            audio_tracks: self.audio_tracks.clone(),
+            markers: Vec::new(),
+            mark_in: self.mark_in,
+            mark_out: self.mark_out,
+            work_area: self.work_area,
+            start_timecode: self.start_timecode,
+            master_volume_db: self.master_volume_db,
+            master_effects: self.master_effects.clone(),
+            master_mixer: self.master_mixer.clone(),
+            submix_tracks: self.submix_tracks.clone(),
+            caption_tracks: Vec::new(),
+            multicam: self.multicam.clone(),
+            merged: None,
+            split: self.split,
+        };
+        if let Some(mc) = &self.multicam {
+            let on = mc.audible_tracks(angle);
+            for t in &mut q.audio_tracks {
+                if !on.contains(&t.id) {
+                    t.muted = true;
+                }
+            }
+        }
+        q
+    }
     /// A copy whose audio tracks are muted except those audible for `angle` (None = the source's
     /// default: camera 1, all, or the first angle when switching). Plain sequences are unchanged.
     pub fn with_angle_audio(&self, angle: Option<usize>) -> Sequence {

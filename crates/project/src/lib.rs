@@ -11,6 +11,7 @@
 
 pub mod audio_plugin;
 pub mod caption;
+pub mod cleanup_fades;
 pub mod easing;
 pub mod effect;
 pub mod essential;

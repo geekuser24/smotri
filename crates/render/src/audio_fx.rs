@@ -307,8 +307,12 @@ fn band(d: &mut dyn AudioEffect, kind: f32, freq: f32, q: f32) {
 }
 
 /// The item's enabled, DSP-backed audio effects in rack order.
-fn active(item: &TrackItem) -> Vec<(&EffectInstance, Mapping)> {
-    item.effects.iter().filter(|e| e.enabled && !e.def().is_some_and(|d| d.intrinsic)).filter_map(|e| mapping(&e.effect).map(|m| (e, m))).collect()
+fn active(item: &TrackItem) -> Vec<(std::borrow::Cow<'_, EffectInstance>, Mapping)> {
+    item.effects
+        .iter()
+        .filter(|e| e.enabled && !e.def().is_some_and(|d| d.intrinsic))
+        .filter_map(|e| mapping(&e.effect).map(|m| (filmcraft_project::cleanup_fades::resolved(item, e), m)))
+        .collect()
 }
 
 /// Whether the item has audio effects that change its signal.
@@ -445,6 +449,41 @@ mod tests {
     use super::*;
     use filmcraft_audio_dsp::Unit;
     use filmcraft_project::{EffectKind, ParamKind, effect_defs};
+
+    #[test]
+    fn cleanup_extended_handles_are_audible_in_processed_samples() {
+        use filmcraft_project::{Project, TrackKind};
+        use filmcraft_time::{FrameRate, TimeRange};
+        for legacy in [false, true] {
+            let mut p = Project::new("recovered audio");
+            let seq = p.new_sequence("source", Default::default(), 1, 1, None);
+            let mut c = p
+                .make_track_item(
+                    seq,
+                    TrackKind::Audio,
+                    Tick::from_units(2, 1),
+                    TimeRange::new(Tick::from_units(2, 1), Tick::from_units(2, 1)),
+                    FrameRate::FPS_25,
+                )
+                .unwrap();
+            filmcraft_project::cleanup_fades::add(&mut c, true, true);
+            if legacy {
+                c.effects.last_mut().unwrap().params.remove("__smotri_cleanup_edges");
+            }
+            c.start = Tick::from_units(1, 1);
+            c.source_in = c.start;
+            c.duration = Tick::from_units(4, 1);
+            for seconds in [1.5, 4.5] {
+                let a0 = (seconds * 48_000.0) as i64;
+                let out = process(&c, a0, 4800, 48_000, &|a, len| {
+                    let tone: Vec<f32> = (0..len).map(|i| (((a + i as i64) as f64 * 440.0 * std::f64::consts::TAU / 48_000.0).sin() * 0.5) as f32).collect();
+                    vec![tone.clone(), tone]
+                });
+                let rms = (out[0].iter().map(|v| v * v).sum::<f32>() / out[0].len() as f32).sqrt();
+                assert!(rms > 0.3, "silent recovered handle: legacy={legacy}, t={seconds}, rms={rms}");
+            }
+        }
+    }
 
     #[test]
     fn every_audio_effect_has_dsp() {

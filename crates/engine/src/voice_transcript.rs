@@ -3,7 +3,7 @@ use crate::{
     EngineError, Result, Session,
     commands::{CommandSpec, has_seq},
 };
-use filmcraft_project::{ItemId, ParamValue, Project, Transcript, effect::find_effect};
+use filmcraft_project::{ItemId, Project, Transcript};
 use filmcraft_time::{TICKS_PER_SECOND, Tick, TimeRange};
 use serde_json::{Value, json};
 use std::{
@@ -298,28 +298,9 @@ fn apply_output(s: &mut Session, p: &Pending, o: Output) -> Result<()> {
                 // Independent gain envelopes avoid overwriting the user's Volume automation.
                 for t in &mut q.audio_tracks {
                     for c in &mut t.items {
-                        let fade = Tick(TICKS_PER_SECOND / 200).min(Tick(c.duration.0 / 2));
                         let fade_in = joins.contains(&c.start);
                         let fade_out = joins.contains(&c.end());
-                        if !(fade_in || fade_out) || c.reverse || c.frame_hold.is_some() {
-                            continue;
-                        }
-                        let Some(mut e) = find_effect("volume_a").map(|d| d.instance()) else {
-                            continue;
-                        };
-                        let a = c.source_time_at(c.start);
-                        let b = c.source_time_at(c.end());
-                        if let Some(v) = e.params.get_mut("level") {
-                            v.put_keyframe(a, ParamValue::Float(if fade_in { -96. } else { 0. }));
-                            if fade_in {
-                                v.put_keyframe(c.source_time_at(c.start + fade), ParamValue::Float(0.));
-                            }
-                            if fade_out {
-                                v.put_keyframe(c.source_time_at(c.end() - fade), ParamValue::Float(0.));
-                            }
-                            v.put_keyframe(b, ParamValue::Float(if fade_out { -96. } else { 0. }));
-                        }
-                        c.effects.push(e);
+                        filmcraft_project::cleanup_fades::add(c, fade_in, fade_out);
                     }
                 }
                 Ok(())

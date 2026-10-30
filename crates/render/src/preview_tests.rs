@@ -300,3 +300,31 @@ fn a_nests_audio_previews_follow_the_sound_of_its_sequence() {
     assert_eq!(audio_hashes(&p, outer), audio, "a video effect inside the nest");
     assert_eq!(audio_hashes(&p, top), deep);
 }
+
+#[test]
+fn audio_only_multicam_snapshot_preserves_mix_without_video_keyframes() {
+    use filmcraft_project::{Camera, MulticamAudio, MulticamSource};
+    let (mut p, matte, ocean, seq) = setup();
+    place_kind(&mut p, seq, TrackKind::Video, matte, 0, 48);
+    place_kind(&mut p, seq, TrackKind::Audio, ocean, 0, 48);
+    let q = p.sequence_mut(seq).unwrap();
+    q.multicam = Some(MulticamSource {
+        cameras: vec![Camera {
+            name: "camera".into(),
+            video_track: Some(q.video_tracks[0].id),
+            audio_tracks: vec![q.audio_tracks[0].id],
+            enabled: true,
+            source: None,
+        }],
+        audio: MulticamAudio::Camera1,
+        sync: String::new(),
+    });
+    for angle in [None, Some(0), Some(99)] {
+        let full = q.with_angle_audio(angle);
+        let audio = q.audio_only_for_angle(angle);
+        assert!(audio.video_tracks.is_empty());
+        assert_eq!(audio.audio_tracks, full.audio_tracks);
+        assert_eq!(audio.master_effects, full.master_effects);
+        assert_eq!(audio.submix_tracks, full.submix_tracks);
+    }
+}
