@@ -29,7 +29,7 @@ jobs:
       CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS: -C target-feature=+crt-static
       CARGO_TARGET_AARCH64_PC_WINDOWS_MSVC_RUSTFLAGS: -C target-feature=+crt-static
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
@@ -46,7 +46,7 @@ jobs:
         run: target/${{ matrix.target }}/release/filmcraft-cli --help
       - name: Package preview with version and checksums
         run: python packaging/preview.py --target ${{ matrix.target }} --platform ${{ matrix.name }} --sha ${{ github.sha }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: Smotri-${{ matrix.name }}-preview
           path: dist/preview/
@@ -56,7 +56,7 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 120
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
@@ -64,7 +64,7 @@ jobs:
         with:
           key: preview-wasm
       - run: cargo build --release --locked -p filmcraft-web --target wasm32-unknown-unknown
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: Smotri-WebAssembly-validation
           path: target/wasm32-unknown-unknown/release/filmcraft_web.wasm
@@ -77,8 +77,8 @@ jobs:
       contents: write
       actions: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
         with:
           path: dist/downloads
           merge-multiple: true
